@@ -74,11 +74,23 @@ function importFromLink(){
   let incoming;
   try{incoming=decodeRoster(hash.slice(SHARE_PARAM.length+1))}
   catch(e){alert('Det gick inte att läsa den delade spelarlistan: '+e.message);return}
-  if(storageError){alert('Kunde inte läsa nuvarande sparade match. Import avbryts för att skydda dina data.');return}
-  const accepted=confirm(`Importera ${incoming.length} spelare?\n\nDin nuvarande spelarlista och alla matchtider på den här enheten ersätts. Den delade länken innehåller bara namn, tröjnummer och positioner.\n\nTryck Avbryt om du vill behålla nuvarande match.`);
-  if(!accepted)return;
-  change(()=>{state={version:1,players:incoming,half:1,elapsedBefore:0,runStarted:null,halfStart:0,finished:false};selected=null});
+  const message=storageError
+    ? `Den gamla sparade matchen på den här telefonen kunde inte läsas.\n\nVill du importera ${incoming.length} spelare ändå? Webbappen försöker först säkerhetskopiera den gamla informationen lokalt. Importen ersätter därefter den gamla matchen.\n\nAvbryt om du vill behålla uppgifterna orörda.`
+    : `Importera ${incoming.length} spelare?\n\nDin nuvarande spelarlista och alla matchtider på den här enheten ersätts. Den delade länken innehåller bara namn, tröjnummer och positioner.\n\nTryck Avbryt om du vill behålla nuvarande match.`;
+  if(!confirm(message))return;
+  try {
+    const original=localStorage.getItem(KEY);
+    if(original!==null){
+      const backupKey=KEY+'-backup-before-import-'+Date.now();
+      localStorage.setItem(backupKey,original);
+    }
+    const replacement={version:1,players:incoming,half:1,elapsedBefore:0,runStarted:null,halfStart:0,finished:false};
+    if(!valid(replacement))throw Error('Den delade spelarlistan klarade inte valideringen.');
+    localStorage.setItem(KEY,JSON.stringify(replacement));
+    state=replacement;storageError='';selected=null;
+  }catch(e){alert('Importen kunde inte slutföras. Gamla data har inte medvetet tagits bort. '+e.message);return}
   history.replaceState(null,'',location.pathname+location.search);
+  render();
   alert('Spelarlistan har importerats. Du kan nu börja en ny match.');
 }
 $('rosterBtn').onclick=()=>{draft=structuredClone(state.players);drawRoster();$('rosterDialog').showModal()};$('closeRoster').onclick=()=>$('rosterDialog').close();$('addPlayer').onclick=()=>{updateDraft();draft.push({id:uid(),name:'',number:'',preferred:'M9',court:null,courtDone:0,benchDone:0,stintStart:elapsed()});drawRoster();const inputs=document.querySelectorAll('.editName');inputs[inputs.length-1]?.focus()};$('saveRoster').onclick=()=>{updateDraft();if(!draft.length||draft.some(p=>!p.name)){alert('Alla spelare måste ha ett namn.');return}if(elapsed()>0&&state.players.some(p=>!draft.find(d=>d.id===p.id))){alert('Efter matchstart går det inte att ta bort spelare.');return}change(()=>state.players=draft);$('rosterDialog').close()};
