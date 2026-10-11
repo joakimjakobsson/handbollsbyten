@@ -1,0 +1,24 @@
+HANDBOLLSBYTEN - WEBBAPP
+
+INNEHALL
+index.html, app.js, style.css, manifest.webmanifest, sw.js och icons/.
+
+PUBLICERA GRATIS MED GITHUB PAGES
+1. Skapa ett gratis konto pa https://github.com/ om du inte redan har det.
+2. Skapa ett nytt PUBLIC repository, exempelvis handbollsbyten.
+3. Packa upp ZIP-filen. Ladda upp filerna inuti mappen Handbollsbyten_webbapp
+   till repots rot (index.html ska ligga i roten, inte i en extra undermapp).
+4. Under Settings -> Pages: Source = Deploy from a branch.
+   Valj branch main och folder /(root), och tryck Save.
+5. Efter publicering: https://DITTANVANDARNAMN.github.io/handbollsbyten/
+   Oppna pa iPhone via Safari och valj Dela -> Lagg till pa hemskarmen.
+
+OBS
+- Webbappen maste serveras via HTTPS for offline-cache och installation.
+- Webbappen fungerar offline efter att filerna laddats och cachelagrats.
+- Spelare och matchdata sparas endast i aktuell webblasare pa aktuell enhet.
+- Rensas Safari-webbplatsdata kan informationen forsvinna.
+- Dela inte telefon mellan foraldrar om ni vill ha samma matchlage;
+  webbappen synkroniserar inte automatiskt mellan enheter.
+- Native iPhone-appens sparade data overfors inte automatiskt.
+- Testa alltid matchen och knappflodet innan ni anvander appen live.
