@@ -15,3 +15,5 @@
 .selectedBadge{display:inline-block;margin-left:6px;padding:3px 7px;
   border-radius:6px;background:#0759e4;color:white;font-size:11px;font-weight:900;letter-spacing:.03em}
 .player.selected .name{color:#0b3f9b}
+
+.import-preview{white-space:pre-line;overflow-wrap:anywhere;background:#e8f2ff;border:1px solid #9bbcf5;border-radius:12px;padding:12px;margin:12px 0;color:#153769;max-height:220px;overflow:auto}

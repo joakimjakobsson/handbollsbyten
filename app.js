@@ -150,34 +150,39 @@ function applyIncomingRoster(incoming){
   alert(`${incoming.length} spelare har importerats. Öppna Spelare för att kontrollera namnen.`);
   return true;
 }
-let importingLink=false;
+// Incoming URLs are parsed on load, but confirmation is deliberately deferred
+// to a real button press. Browsers may suppress native confirm() at page load.
+let lastOffer = '';
 function importFromLink(){
   const url=new URL(location.href);
-  if(!url.searchParams.has(SHARE_PARAM)&&!url.hash.startsWith('#lag='))return;
-  if(importingLink)return;
-  importingLink=true;
+  if(!url.searchParams.has(SHARE_PARAM) && !url.hash.startsWith('#lag='))return;
+  const token=url.searchParams.get(SHARE_PARAM) || new URLSearchParams(url.hash.slice(1)).get(SHARE_PARAM) || '';
+  if(token===lastOffer && $('importDialog').open)return;
+  lastOffer=token;
   $('importLink').value=url.href;
+  $('importError').hidden=true;
   try {
     const incoming=importRosterText(url.href);
-    if(applyIncomingRoster(incoming)){
-      clearShareParameters();
-      $('importDialog').close();
-    }
+    $('importPreview').hidden=false;
+    $('importPreview').textContent=`Delad spelarlista (${incoming.length} spelare):\n` +
+      incoming.map(p=>`${p.number ? '#'+p.number+' ' : ''}${p.name}`).join('\n') +
+      '\n\nTryck ”Läs in spelarlista” för att godkänna importen.';
   } catch(e){
+    $('importPreview').hidden=true;
     $('importError').textContent=e.message;
     $('importError').hidden=false;
-    if(!$('importDialog').open)$('importDialog').showModal();
-  } finally {importingLink=false;}
+  }
+  if(!$('importDialog').open)$('importDialog').showModal();
 }
-$('importRosterBtn').onclick=()=>{$('importError').hidden=true;$('importDialog').showModal();};
-$('closeImport').onclick=()=>$('importDialog').close();
+$('importRosterBtn').onclick=()=>{$('importError').hidden=true;$('importPreview').hidden=true;$('importDialog').showModal();};
+$('closeImport').onclick=()=>{$('importDialog').close();clearShareParameters();lastOffer='';};
 $('confirmImport').onclick=()=>{
   $('importError').hidden=true;
-  try{const incoming=importRosterText($('importLink').value);if(applyIncomingRoster(incoming)){$('importDialog').close();clearShareParameters();}}
+  try{const incoming=importRosterText($('importLink').value);if(applyIncomingRoster(incoming)){$('importDialog').close();clearShareParameters();lastOffer='';}}
   catch(e){$('importError').textContent=e.message;$('importError').hidden=false;}
 };
 $('rosterBtn').onclick=()=>{draft=structuredClone(state.players);drawRoster();$('rosterDialog').showModal()};$('closeRoster').onclick=()=>$('rosterDialog').close();$('addPlayer').onclick=()=>{updateDraft();draft.push({id:uid(),name:'',number:'',preferred:'M9',court:null,courtDone:0,benchDone:0,stintStart:elapsed()});drawRoster();const inputs=document.querySelectorAll('.editName');inputs[inputs.length-1]?.focus()};$('saveRoster').onclick=()=>{updateDraft();if(!draft.length||draft.some(p=>!p.name)){alert('Alla spelare måste ha ett namn.');return}if(elapsed()>0&&state.players.some(p=>!draft.find(d=>d.id===p.id))){alert('Efter matchstart går det inte att ta bort spelare.');return}change(()=>state.players=draft);$('rosterDialog').close()};
-render();importFromLink();window.addEventListener('hashchange',importFromLink);window.addEventListener('popstate',importFromLink);window.addEventListener('pageshow',importFromLink);// Update only text while the clock is running. Replacing rows each second
+render();importFromLink();window.addEventListener('hashchange',importFromLink);window.addEventListener('popstate',importFromLink);window.addEventListener('pageshow',importFromLink);window.addEventListener('focus',importFromLink);// Update only text while the clock is running. Replacing rows each second
 // destroys touch targets before iOS dispatches click, requiring two taps.
 function refreshClockText(){
   if(state.runStarted===null)return;
