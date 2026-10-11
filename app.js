@@ -44,7 +44,7 @@ function makeRow(p,t,rank){
   }
   return row;
 }
-function render(){const t=elapsed();$('clock').textContent=fmt(halfElapsed());$('halfLabel').textContent=state.finished?'MATCH AVSLUTAD':`HALVLEK ${state.half}`;$('totalTime').textContent=`Totalt ${fmt(t)} · ${state.finished?'Avslutad':state.runStarted!==null?'Pågår':'Pausad'}`;$('toggleBtn').textContent=state.runStarted!==null?'Ⅱ Pausa':'▶ Starta';$('toggleBtn').disabled=state.finished||!!storageError;$('halfBtn').textContent=state.half===1?'Halvtid':'Avsluta';$('halfBtn').disabled=state.finished||halfElapsed()===0||!!storageError;$('rosterBtn').disabled=state.runStarted!==null||!!storageError;$('storageWarning').hidden=!storageError;$('storageWarning').textContent=storageError;
+function render(){prepareShareLink();const t=elapsed();$('clock').textContent=fmt(halfElapsed());$('halfLabel').textContent=state.finished?'MATCH AVSLUTAD':`HALVLEK ${state.half}`;$('totalTime').textContent=`Totalt ${fmt(t)} · ${state.finished?'Avslutad':state.runStarted!==null?'Pågår':'Pausad'}`;$('toggleBtn').textContent=state.runStarted!==null?'Ⅱ Pausa':'▶ Starta';$('toggleBtn').disabled=state.finished||!!storageError;$('halfBtn').textContent=state.half===1?'Halvtid':'Avsluta';$('halfBtn').disabled=state.finished||halfElapsed()===0||!!storageError;$('rosterBtn').disabled=state.runStarted!==null||!!storageError;$('storageWarning').hidden=!storageError;$('storageWarning').textContent=storageError;
 const chosen=state.players.find(x=>x.id===selected);$('hint').textContent=chosen?`Vald: ${chosen.name}. ${chosen.court?'Tryck på en bänkspelare för byte eller en planspelare för positionsbyte.':'Tryck på spelaren som ska ut eller på en tom position.'} (Tryck samma spelare för att avbryta.)`:'Välj först en bänkspelare och sedan spelaren på planen som ska ut.';$('hint').classList.toggle('has-selection',!!chosen);
 const ranks=state.players.filter(p=>p.court&&p.court!=='MV').sort((a,b)=>current(b,t)-current(a,t)||a.name.localeCompare(b.name,'sv'));const ranking=new Map(ranks.slice(0,2).map((p,i)=>[p.id,i+1]));const court=$('court');court.replaceChildren();POS.forEach(pos=>{const p=state.players.find(p=>p.court===pos);if(p){court.append(makeRow(p,t,ranking.get(p.id)||0));return}const btn=el('button','player empty'+(chosen?' can-enter':''),`${pos} · Tom plats ${chosen?'· Tryck för att sätta in':''}`);btn.disabled=!chosen||state.finished;btn.onclick=()=>change(()=>{move(chosen.id,pos);selected=null});court.append(btn)});$('courtCount').textContent=`${state.players.filter(p=>p.court).length}/7`;const bench=state.players.filter(p=>!p.court).sort((a,b)=>a.stintStart-b.stintStart||a.name.localeCompare(b.name,'sv'));$('bench').replaceChildren(...bench.map(p=>makeRow(p,t,0)));$('benchCount').textContent=`${bench.length} spelare`;
 }
@@ -60,20 +60,49 @@ const SHARE_PARAM='lag';
 function rosterPayload(){
   return {v:1,players:state.players.map(p=>({name:p.name,number:String(p.number??''),preferred:p.preferred,court:p.court??null}))};
 }
-function encodeRoster(data){
-  const bytes=new TextEncoder().encode(JSON.stringify(data));
+// Compact v2 payload: [version, [[name, shirt, preferredIndex, courtIndex], ...]].
+// Positions use 0..6; -1 means that a player is on the bench.
+// The older v1 encoded JSON format remains supported for imported links.
+const utf8Encoder=new TextEncoder();
+const utf8Decoder=new TextDecoder('utf-8',{fatal:true});
+const SHARE_MAX_BYTES=32000;
+function bytesToToken(bytes){
   let binary='';for(const byte of bytes)binary+=String.fromCharCode(byte);
   return btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 }
-function decodeRoster(encoded){
-  if(encoded.length>20000||!/^[a-zA-Z0-9_-]+$/.test(encoded))throw Error('Delningskoden är ogiltig eller för stor.');
-  let value;
-  try {
-    const binary=atob(encoded.replace(/-/g,'+').replace(/_/g,'/').padEnd(Math.ceil(encoded.length/4)*4,'='));
-    value=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(Uint8Array.from(binary,c=>c.charCodeAt(0))));
-  } catch(e){throw Error('Det går inte att avkoda spelarlistan. Kopiera hela länken igen.');}
+function tokenToBytes(encoded){
+  if(encoded.length>24000||!/^[A-Za-z0-9_-]+$/.test(encoded))throw Error('Delningskoden inneh\u00e5ller ogiltiga tecken eller \u00e4r f\u00f6r stor.');
+  const binary=atob(encoded.replace(/-/g,'+').replace(/_/g,'/').padEnd(Math.ceil(encoded.length/4)*4,'='));
+  return Uint8Array.from(binary,c=>c.charCodeAt(0));
+}
+function compactRosterJSON(){
+  return JSON.stringify([2,state.players.map(p=>[
+    p.name,String(p.number??''),POS.indexOf(p.preferred),p.court===null?-1:POS.indexOf(p.court)
+  ])]);
+}
+async function deflateBytes(bytes){
+  const stream=new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+async function inflateBytes(bytes){
+  if(typeof DecompressionStream!=='function')throw Error('Din webbl\u00e4sare kan inte packa upp den korta l\u00e4nken. Uppdatera Safari eller anv\u00e4nd en nyare webbl\u00e4sare.');
+  const reader=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate')).getReader();
+  const chunks=[];let total=0;
+  try{
+    while(true){
+      const {value,done}=await reader.read();if(done)break;
+      total+=value.byteLength;
+      if(total>SHARE_MAX_BYTES){await reader.cancel();throw Error('Spelarlistan \u00e4r f\u00f6r stor.');}
+      chunks.push(value);
+    }
+  }finally{reader.releaseLock();}
+  const combined=new Uint8Array(total);let cursor=0;
+  for(const chunk of chunks){combined.set(chunk,cursor);cursor+=chunk.byteLength;}
+  return combined;
+}
+function normalizeSharedPlayers(value){
   const list=Array.isArray(value)?value:value?.players;
-  if(!Array.isArray(list)||list.length<1||list.length>50)throw Error('Länken innehåller inte en giltig spelarlista.');
+  if(!Array.isArray(list)||list.length<1||list.length>50)throw Error('L\u00e4nken inneh\u00e5ller inte en giltig spelarlista.');
   const occupied=new Set();
   return list.map((p,i)=>{
     if(!p||typeof p!=='object')throw Error(`Spelare ${i+1} har fel format.`);
@@ -81,54 +110,96 @@ function decodeRoster(encoded){
     if(!name||name.length>80)throw Error(`Spelare ${i+1} saknar ett giltigt namn.`);
     const rawNumber=p.number??p.jerseyNumber??'';
     const number=String(rawNumber).trim().replace(/^#/,'');
-    if(!/^\d{0,3}$/.test(number))throw Error(`Tröjnumret för ${name} är ogiltigt.`);
+    if(!/^\d{0,3}$/.test(number))throw Error(`Tr\u00f6jnumret f\u00f6r ${name} \u00e4r ogiltigt.`);
     const preferred=p.preferred??p.preferredPosition??p.position??'M9';
-    if(!POS.includes(preferred))throw Error(`Grundpositionen för ${name} är ogiltig.`);
-    // Earlier versions sometimes omitted court entirely for bench players.
-    let court=p.court??p.courtPosition??null;
-    if(court!==null&&!POS.includes(court))throw Error(`Planpositionen för ${name} är ogiltig.`);
+    if(!POS.includes(preferred))throw Error(`Grundpositionen f\u00f6r ${name} \u00e4r ogiltig.`);
+    const court=p.court??p.courtPosition??null;
+    if(court!==null&&!POS.includes(court))throw Error(`Planpositionen f\u00f6r ${name} \u00e4r ogiltig.`);
     if(court!==null){
-      if(occupied.has(court))throw Error(`Två spelare är placerade på ${court}.`);
+      if(occupied.has(court))throw Error(`Tv\u00e5 spelare \u00e4r placerade p\u00e5 ${court}.`);
       occupied.add(court);
     }
     return {id:uid(),name,number,preferred,court,courtDone:0,benchDone:0,stintStart:0};
   });
 }
-function shareURL(){
-  // Query parameter survives redirects and common messaging/PWA link handoffs better than fragments.
-  const u=new URL('./',location.href);
-  u.searchParams.set(SHARE_PARAM,encodeRoster(rosterPayload()));
-  return u.href;
+async function decodeRoster(encoded){
+  let payload;
+  if(encoded.startsWith('v2z.')||encoded.startsWith('v2.')){
+    const zipped=encoded.startsWith('v2z.');
+    const body=encoded.slice(zipped?4:3);
+    try{
+      let bytes=tokenToBytes(body);
+      if(zipped)bytes=await inflateBytes(bytes);
+      if(bytes.byteLength>SHARE_MAX_BYTES)throw Error('Spelarlistan \u00e4r f\u00f6r stor.');
+      payload=JSON.parse(utf8Decoder.decode(bytes));
+    }catch(e){
+      if(e.message?.startsWith('Din webbl')||e.message?.startsWith('Spelarlistan \u00e4r f\u00f6r stor'))throw e;
+      throw Error('Den korta delningsl\u00e4nken kunde inte avkodas. Be avs\u00e4ndaren kopiera en ny l\u00e4nk.');
+    }
+    if(!Array.isArray(payload)||payload.length!==2||payload[0]!==2||!Array.isArray(payload[1]))
+      throw Error('Fel version av spelarlistan.');
+    const list=payload[1].map((entry,i)=>{
+      if(!Array.isArray(entry)||entry.length!==4||!Number.isInteger(entry[2])||!Number.isInteger(entry[3])||
+        entry[2]<0||entry[2]>=POS.length||entry[3]<-1||entry[3]>=POS.length)
+        throw Error(`Spelare ${i+1} har en ogiltig position.`);
+      return {name:entry[0],number:entry[1],preferred:POS[entry[2]],court:entry[3]===-1?null:POS[entry[3]]};
+    });
+    return normalizeSharedPlayers(list);
+  }
+  // v1, including older links with #lag= and ?lag=.
+  try{payload=JSON.parse(utf8Decoder.decode(tokenToBytes(encoded)));}
+  catch(e){throw Error('Den \u00e4ldre delningsl\u00e4nken kunde inte avkodas.');}
+  return normalizeSharedPlayers(payload);
 }
+const shareCache={signature:null,url:''};
+async function prepareShareLink(){
+  const signature=compactRosterJSON();
+  if(shareCache.signature===signature)return;
+  shareCache.signature=signature;shareCache.url='';
+  $('shareRosterBtn').disabled=true;
+  $('shareRosterBtn').textContent='F\u00f6rbereder l\u00e4nk...';
+  const raw=utf8Encoder.encode(signature);
+  let token='v2.'+bytesToToken(raw);
+  if(typeof CompressionStream==='function'){
+    try{
+      const packed='v2z.'+bytesToToken(await deflateBytes(raw));
+      if(packed.length<token.length)token=packed;
+    }catch(e){ /* Fall back to compact, uncompressed v2 format. */ }
+  }
+  if(shareCache.signature!==signature)return; // Roster was edited while compressing.
+  const url=new URL('./',location.href);
+  url.searchParams.set(SHARE_PARAM,token);
+  shareCache.url=url.href;
+  $('shareRosterBtn').disabled=false;
+  $('shareRosterBtn').textContent='\u29c9 Kopiera lagl\u00e4nk';
+}
+function shareURL(){return shareCache.url;}
 $('shareRosterBtn').onclick=async()=>{
   const url=shareURL();
-  // Copy a plain text URL: never pass it to the iOS share sheet as a URL item.
+  if(!url){alert('L\u00e4nken f\u00f6rbereds. Prova igen om en stund.');return;}
   try {
-    if(navigator.clipboard?.writeText) {
+    if(navigator.clipboard?.writeText){
       await navigator.clipboard.writeText(url);
-      alert('Hela länken är kopierad som text. Klistra in den i WhatsApp eller Messenger.');
+      alert(`Lagl\u00e4nken \u00e4r kopierad (${url.length} tecken). Klistra in den i WhatsApp eller Meddelanden.`);
       return;
     }
-  } catch(e) { /* Fall back to a selectable text field. */ }
-  // Fallback for browsers that do not allow programmatic clipboard access.
-  prompt('Kopiera hela länken och klistra in den i meddelandet:', url);
+  }catch(e){ /* Show a manual copy prompt if clipboard access is blocked. */ }
+  prompt('Kopiera hela lagl\u00e4nken:',url);
 };
-function importRosterText(text){
+async function importRosterText(text){
   const source=text.trim();
-  if(!source)throw Error('Klistra in en delningslänk först.');
+  if(!source)throw Error('Klistra in en delningsl\u00e4nk f\u00f6rst.');
   let encoded='';
   try {
-    if(source.startsWith('#lag=')||source.startsWith('?lag=')||source.startsWith('lag=')) {
-      const token=source.replace(/^[#?]/,'');
-      encoded=new URLSearchParams(token).get(SHARE_PARAM)||'';
-    } else {
-      // Accept link text copied from a message, not only a raw URL.
+    if(source.startsWith('#lag=')||source.startsWith('?lag=')||source.startsWith('lag=')){
+      encoded=new URLSearchParams(source.replace(/^[#?]/,'')).get(SHARE_PARAM)||'';
+    }else{
       const found=source.match(/https?:\/\/[^\s<>]+/);
       const url=new URL(found?found[0]:source);
       encoded=url.searchParams.get(SHARE_PARAM)||new URLSearchParams(url.hash.slice(1)).get(SHARE_PARAM)||'';
     }
-  } catch(e) {throw Error('Det här verkar inte vara en giltig delningslänk.');}
-  if(!encoded)throw Error('Länken saknar spelarlistan (lag=...). Öppna länken direkt eller be avsändaren dela igen.');
+  }catch(e){throw Error('Det h\u00e4r verkar inte vara en giltig delningsl\u00e4nk.');}
+  if(!encoded)throw Error('L\u00e4nken saknar spelarlistan (lag=...). Be avs\u00e4ndaren dela igen.');
   return decodeRoster(encoded);
 }
 function clearShareParameters(){
@@ -156,34 +227,62 @@ function applyIncomingRoster(incoming){
 }
 // Incoming URLs are parsed on load, but confirmation is deliberately deferred
 // to a real button press. Browsers may suppress native confirm() at page load.
-let lastOffer = '';
-function importFromLink(){
-  const url=new URL(location.href);
-  if(!url.searchParams.has(SHARE_PARAM) && !url.hash.startsWith('#lag='))return;
-  const token=url.searchParams.get(SHARE_PARAM) || new URLSearchParams(url.hash.slice(1)).get(SHARE_PARAM) || '';
-  if(token===lastOffer && $('importDialog').open)return;
-  lastOffer=token;
-  $('importLink').value=url.href;
+let lastOffer='';
+let pendingSource='',pendingPlayers=null;
+function clearImportPreview(){
+  pendingSource='';pendingPlayers=null;
+  $('importPreview').hidden=true;
+  $('confirmImport').textContent='L\u00e4s in spelarlista';
+}
+async function previewImport(source){
+  clearImportPreview();
   $('importError').hidden=true;
-  try {
-    const incoming=importRosterText(url.href);
+  try{
+    const incoming=await importRosterText(source);
+    if($('importLink').value!==source)return;
+    pendingSource=source;pendingPlayers=incoming;
     $('importPreview').hidden=false;
-    $('importPreview').textContent=`Delad spelarlista (${incoming.length} spelare):\n` +
-      incoming.map(p=>`${p.number ? '#'+p.number+' ' : ''}${p.name}`).join('\n') +
-      '\n\nTryck ”Läs in spelarlista” för att godkänna importen.';
-  } catch(e){
-    $('importPreview').hidden=true;
+    $('importPreview').textContent=`Delad spelarlista (${incoming.length} spelare):\n`+
+      incoming.map(p=>`${p.number?'#'+p.number+' ':''}${p.name}`).join('\n')+
+      '\n\nTryck knappen f\u00f6r att godk\u00e4nna importen.';
+    $('confirmImport').textContent='Bekr\u00e4fta import';
+  }catch(e){
+    if($('importLink').value!==source)return;
     $('importError').textContent=e.message;
     $('importError').hidden=false;
   }
-  if(!$('importDialog').open)$('importDialog').showModal();
 }
-$('importRosterBtn').onclick=()=>{$('importError').hidden=true;$('importPreview').hidden=true;$('importDialog').showModal();};
-$('closeImport').onclick=()=>{$('importDialog').close();clearShareParameters();lastOffer='';};
-$('confirmImport').onclick=()=>{
+async function importFromLink(){
+  const url=new URL(location.href);
+  if(!url.searchParams.has(SHARE_PARAM)&&!url.hash.startsWith('#lag='))return;
+  const token=url.searchParams.get(SHARE_PARAM)||new URLSearchParams(url.hash.slice(1)).get(SHARE_PARAM)||'';
+  if(token===lastOffer&&$('importDialog').open)return;
+  lastOffer=token;
+  $('importLink').value=url.href;
+  if(!$('importDialog').open)$('importDialog').showModal();
+  await previewImport(url.href);
+}
+$('importLink').addEventListener('input',()=>{clearImportPreview();$('importError').hidden=true;});
+$('importRosterBtn').onclick=()=>{
+  $('importLink').value='';clearImportPreview();$('importError').hidden=true;
+  $('importDialog').showModal();
+};
+$('closeImport').onclick=()=>{
+  $('importDialog').close();clearShareParameters();lastOffer='';clearImportPreview();
+};
+$('confirmImport').onclick=async()=>{
+  const source=$('importLink').value;
   $('importError').hidden=true;
-  try{const incoming=importRosterText($('importLink').value);if(applyIncomingRoster(incoming)){$('importDialog').close();clearShareParameters();lastOffer='';}}
-  catch(e){$('importError').textContent=e.message;$('importError').hidden=false;}
+  if(pendingSource===source&&pendingPlayers){
+    try{
+      if(applyIncomingRoster(pendingPlayers)){
+        $('importDialog').close();clearShareParameters();lastOffer='';clearImportPreview();
+      }
+    }catch(e){$('importError').textContent=e.message;$('importError').hidden=false;}
+    return;
+  }
+  $('confirmImport').disabled=true;
+  try{await previewImport(source);}finally{$('confirmImport').disabled=false;}
 };
 $('rosterBtn').onclick=()=>{draft=structuredClone(state.players);drawRoster();$('rosterDialog').showModal()};$('closeRoster').onclick=()=>$('rosterDialog').close();$('addPlayer').onclick=()=>{updateDraft();draft.push({id:uid(),name:'',number:'',preferred:'M9',court:null,courtDone:0,benchDone:0,stintStart:elapsed()});drawRoster();const inputs=document.querySelectorAll('.editName');inputs[inputs.length-1]?.focus()};$('saveRoster').onclick=()=>{updateDraft();if(!draft.length||draft.some(p=>!p.name)){alert('Alla spelare måste ha ett namn.');return}if(elapsed()>0&&state.players.some(p=>!draft.find(d=>d.id===p.id))){alert('Efter matchstart går det inte att ta bort spelare.');return}change(()=>state.players=draft);$('rosterDialog').close()};
 render();importFromLink();window.addEventListener('hashchange',importFromLink);window.addEventListener('popstate',importFromLink);window.addEventListener('pageshow',importFromLink);window.addEventListener('focus',importFromLink);// Update only text while the clock is running. Replacing rows each second
