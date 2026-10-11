@@ -6,3 +6,12 @@
 @media (max-width:700px){.topbar{padding-top:calc(48px + env(safe-area-inset-top))}}
 
 #importLink{width:100%;padding:12px;border:1px solid #adbed6;border-radius:10px;font-size:16px;resize:vertical;min-height:96px;margin:6px 0 10px} .paste-label{font-size:13px;font-weight:700;color:#334b6b}.header-actions{flex-wrap:wrap}.topbar{align-items:flex-start}@media(max-width:600px){.header-actions{max-width:57%}.header-actions button{font-size:11px;padding:8px}.brand img{width:36px;height:36px}}
+
+/* Selection always overrides red/orange court-time ranking. */
+.player.selected,.player.selected.rank1,.player.selected.rank2{
+  border:3px solid #0759e4;background:#dceaff;
+  box-shadow:inset 0 0 0 2px #fff,0 0 0 2px #0759e4;
+}
+.selectedBadge{display:inline-block;margin-left:6px;padding:3px 7px;
+  border-radius:6px;background:#0759e4;color:white;font-size:11px;font-weight:900;letter-spacing:.03em}
+.player.selected .name{color:#0b3f9b}

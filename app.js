@@ -7,7 +7,7 @@ const uid=()=>crypto.randomUUID?crypto.randomUUID():String(Date.now()+Math.rando
 function initial(){const players=POS.map((pos,i)=>({id:uid(),name:`Spelare ${i+1}`,number:'',preferred:pos,court:pos,courtDone:0,benchDone:0,stintStart:0}));['V9','H9','M6'].forEach((pos,i)=>players.push({id:uid(),name:`Spelare ${i+8}`,number:'',preferred:pos,court:null,courtDone:0,benchDone:0,stintStart:0}));return {version:1,players,half:1,elapsedBefore:0,runStarted:null,halfStart:0,finished:false}};
 function valid(m){return m&&m.version===1&&Array.isArray(m.players)&&m.players.length>0&&[1,2].includes(m.half)&&Number.isFinite(m.elapsedBefore)&&m.elapsedBefore>=0&&Number.isFinite(m.halfStart)&&m.halfStart<=m.elapsedBefore&&(m.runStarted===null||Number.isFinite(m.runStarted))&&(!m.finished||m.runStarted===null)&&new Set(m.players.map(p=>p.id)).size===m.players.length&&new Set(m.players.map(p=>p.court).filter(Boolean)).size===m.players.filter(p=>p.court).length&&m.players.every(p=>typeof p.name==='string'&&p.name.trim()&&POS.includes(p.preferred)&&(p.court===null||POS.includes(p.court))&&['courtDone','benchDone','stintStart'].every(k=>Number.isFinite(p[k])&&p[k]>=0));}
 let state;let storageError='';try{const raw=localStorage.getItem(KEY);state=raw?JSON.parse(raw):initial();if(!valid(state))throw Error('Ogiltig sparad match');}catch(e){state=initial();storageError=`Det gick inte att läsa den sparade matchen (${e.message}). Ingenting skrivs över förrän du återställer lagringen.`;}
-let selected=null, draft=null, gestureTimer=null, longFired=false;
+let selected=null, draft=null;
 const elapsed=(now=Date.now())=>state.elapsedBefore+(state.runStarted!==null?Math.max(0,(now-state.runStarted)/1000):0);
 const halfElapsed=()=>Math.max(0,elapsed()-state.halfStart);
 const fmt=s=>{s=Math.max(0,Math.floor(s));return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`};
@@ -20,7 +20,30 @@ function settle(p,t){if(p.court)p.courtDone+=current(p,t);else p.benchDone+=curr
 function move(id,to){const p=state.players.find(x=>x.id===id);if(!p||state.finished||p.court===to)return;const old=p.court,t=elapsed(),other=state.players.find(x=>x.court===to&&to!==null);if(other){if(old===null){settle(p,t);settle(other,t)}other.court=old;p.court=to}else{if((old===null)!==(to===null))settle(p,t);p.court=to}}
 function tap(id){if(state.finished)return;const p=state.players.find(x=>x.id===id);if(!p)return;if(!selected){selected=id;render();return}if(selected===id){selected=null;render();return}const first=state.players.find(x=>x.id===selected);if(!first){selected=null;render();return}if(!first.court&&!p.court){selected=id;render();return}change(()=>{if(p.court)move(first.id,p.court);else if(first.court)move(p.id,first.court);selected=null})}
 const el=(tag,cls='',text='')=>{const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=text;return node};
-function makeRow(p,t,rank){const row=el('button','player'+(selected===p.id?' selected':'')+(rank===1?' rank1':rank===2?' rank2':''));row.type='button';const pos=el('span','position',p.court||p.preferred);row.append(pos);if(p.number)row.append(el('span','jersey','#'+p.number));const details=el('span','details');details.append(el('div','name',p.name));const meta=el('div','subtext',p.court?'På plan':'På bänk');if(rank)meta.append(el('span','rankBadge',rank===1?'● Längst':'● Näst längst'));details.append(meta);row.append(details);const num=el('span','numbers');num.append(el('b','',fmt(current(p,t))));num.append(el('small','',`Plan ${fmt(courtTotal(p,t))} · Bänk ${fmt(benchTotal(p,t))}`));row.append(num);row.addEventListener('click',()=>{if(longFired){longFired=false;return}tap(p.id)});if(p.court){row.addEventListener('contextmenu',e=>{e.preventDefault();if(confirm(`Flytta ${p.name} till bänken utan ersättare?`))change(()=>{move(p.id,null);selected=null})});row.addEventListener('touchstart',()=>{longFired=false;gestureTimer=setTimeout(()=>{longFired=true;gestureTimer=null;if(confirm(`Flytta ${p.name} till bänken utan ersättare?`))change(()=>{move(p.id,null);selected=null})},720)},{passive:true});['touchend','touchcancel','touchmove'].forEach(ev=>row.addEventListener(ev,()=>{clearTimeout(gestureTimer);gestureTimer=null},{passive:true}))}return row}
+function makeRow(p,t,rank){
+  const isSelected=selected===p.id;
+  const row=el('button','player'+(isSelected?' selected':'')+(rank===1?' rank1':rank===2?' rank2':''));
+  row.type='button';row.dataset.playerId=p.id;row.setAttribute('aria-pressed',String(isSelected));
+  const pos=el('span','position',p.court||p.preferred);row.append(pos);
+  if(p.number)row.append(el('span','jersey','#'+p.number));
+  const details=el('span','details');details.append(el('div','name',p.name));
+  const meta=el('div','subtext',p.court?'På plan':'På bänk');
+  if(rank)meta.append(el('span','rankBadge',rank===1?'● Längst':'● Näst längst'));
+  if(isSelected)meta.append(el('span','selectedBadge','✓ VALD'));
+  details.append(meta);row.append(details);
+  const num=el('span','numbers');num.append(el('b','playerCurrent',fmt(current(p,t))));
+  num.append(el('small','playerTotals',`Plan ${fmt(courtTotal(p,t))} · Bänk ${fmt(benchTotal(p,t))}`));row.append(num);
+  // No global touch state: a previous long press must not swallow another player's tap.
+  let longPressed=false,holdTimer=null;
+  row.addEventListener('click',e=>{if(longPressed){e.preventDefault();longPressed=false;return}tap(p.id)});
+  if(p.court){
+    const benchPlayer=()=>{if(confirm(`Flytta ${p.name} till bänken utan ersättare?`))change(()=>{move(p.id,null);selected=null})};
+    row.addEventListener('contextmenu',e=>{e.preventDefault();if(holdTimer!==null){clearTimeout(holdTimer);holdTimer=null}if(!longPressed){longPressed=true;benchPlayer()}});
+    row.addEventListener('touchstart',()=>{longPressed=false;clearTimeout(holdTimer);holdTimer=setTimeout(()=>{longPressed=true;holdTimer=null;benchPlayer()},850)},{passive:true});
+    ['touchend','touchcancel','touchmove'].forEach(ev=>row.addEventListener(ev,()=>{clearTimeout(holdTimer);holdTimer=null},{passive:true}));
+  }
+  return row;
+}
 function render(){const t=elapsed();$('clock').textContent=fmt(halfElapsed());$('halfLabel').textContent=state.finished?'MATCH AVSLUTAD':`HALVLEK ${state.half}`;$('totalTime').textContent=`Totalt ${fmt(t)} · ${state.finished?'Avslutad':state.runStarted!==null?'Pågår':'Pausad'}`;$('toggleBtn').textContent=state.runStarted!==null?'Ⅱ Pausa':'▶ Starta';$('toggleBtn').disabled=state.finished||!!storageError;$('halfBtn').textContent=state.half===1?'Halvtid':'Avsluta';$('halfBtn').disabled=state.finished||halfElapsed()===0||!!storageError;$('rosterBtn').disabled=state.runStarted!==null||!!storageError;$('storageWarning').hidden=!storageError;$('storageWarning').textContent=storageError;
 const chosen=state.players.find(x=>x.id===selected);$('hint').textContent=chosen?`Vald: ${chosen.name}. ${chosen.court?'Tryck på en bänkspelare för byte eller en planspelare för positionsbyte.':'Tryck på spelaren som ska ut eller på en tom position.'} (Tryck samma spelare för att avbryta.)`:'Välj först en bänkspelare och sedan spelaren på planen som ska ut.';$('hint').classList.toggle('has-selection',!!chosen);
 const ranks=state.players.filter(p=>p.court&&p.court!=='MV').sort((a,b)=>current(b,t)-current(a,t)||a.name.localeCompare(b.name,'sv'));const ranking=new Map(ranks.slice(0,2).map((p,i)=>[p.id,i+1]));const court=$('court');court.replaceChildren();POS.forEach(pos=>{const p=state.players.find(p=>p.court===pos);if(p){court.append(makeRow(p,t,ranking.get(p.id)||0));return}const btn=el('button','player empty'+(chosen?' can-enter':''),`${pos} · Tom plats ${chosen?'· Tryck för att sätta in':''}`);btn.disabled=!chosen||state.finished;btn.onclick=()=>change(()=>{move(chosen.id,pos);selected=null});court.append(btn)});$('courtCount').textContent=`${state.players.filter(p=>p.court).length}/7`;const bench=state.players.filter(p=>!p.court).sort((a,b)=>a.stintStart-b.stintStart||a.name.localeCompare(b.name,'sv'));$('bench').replaceChildren(...bench.map(p=>makeRow(p,t,0)));$('benchCount').textContent=`${bench.length} spelare`;
@@ -154,4 +177,20 @@ $('confirmImport').onclick=()=>{
   catch(e){$('importError').textContent=e.message;$('importError').hidden=false;}
 };
 $('rosterBtn').onclick=()=>{draft=structuredClone(state.players);drawRoster();$('rosterDialog').showModal()};$('closeRoster').onclick=()=>$('rosterDialog').close();$('addPlayer').onclick=()=>{updateDraft();draft.push({id:uid(),name:'',number:'',preferred:'M9',court:null,courtDone:0,benchDone:0,stintStart:elapsed()});drawRoster();const inputs=document.querySelectorAll('.editName');inputs[inputs.length-1]?.focus()};$('saveRoster').onclick=()=>{updateDraft();if(!draft.length||draft.some(p=>!p.name)){alert('Alla spelare måste ha ett namn.');return}if(elapsed()>0&&state.players.some(p=>!draft.find(d=>d.id===p.id))){alert('Efter matchstart går det inte att ta bort spelare.');return}change(()=>state.players=draft);$('rosterDialog').close()};
-render();importFromLink();window.addEventListener('hashchange',importFromLink);window.addEventListener('popstate',importFromLink);window.addEventListener('pageshow',importFromLink);setInterval(()=>{if(state.runStarted!==null)render()},1000);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')render();else persist()});window.addEventListener('pagehide',persist);if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{});
+render();importFromLink();window.addEventListener('hashchange',importFromLink);window.addEventListener('popstate',importFromLink);window.addEventListener('pageshow',importFromLink);// Update only text while the clock is running. Replacing rows each second
+// destroys touch targets before iOS dispatches click, requiring two taps.
+function refreshClockText(){
+  if(state.runStarted===null)return;
+  const t=elapsed();
+  $('clock').textContent=fmt(halfElapsed());
+  $('totalTime').textContent=`Totalt ${fmt(t)} · Pågår`;
+  document.querySelectorAll('.player[data-player-id]').forEach(row=>{
+    const p=state.players.find(x=>x.id===row.dataset.playerId);
+    if(!p)return;
+    const time=row.querySelector('.playerCurrent');
+    const totals=row.querySelector('.playerTotals');
+    if(time)time.textContent=fmt(current(p,t));
+    if(totals)totals.textContent=`Plan ${fmt(courtTotal(p,t))} · Bänk ${fmt(benchTotal(p,t))}`;
+  });
+}
+setInterval(refreshClockText,250);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')render();else persist()});window.addEventListener('pagehide',persist);if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{});
