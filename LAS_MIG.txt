@@ -22,3 +22,12 @@ OBS
   webbappen synkroniserar inte automatiskt mellan enheter.
 - Native iPhone-appens sparade data overfors inte automatiskt.
 - Testa alltid matchen och knappflodet innan ni anvander appen live.
+
+DELA SPELARLISTAN
+- Tryck "Dela lag" och dela länken via meddelande/WhatsApp.
+- Den som öppnar länken på sin telefon får bekräfta att hela lokala matchen
+  ersätts med spelarlistan från länken (matchtider importeras inte).
+- Länken innehåller namn, tröjnummer, grundposition och aktuell
+  planposition. Den har ingen åtkomstkontroll: dela endast med avsedda personer.
+- Efter uppladdning av nya filer kan gamla installerade webbappar behöva
+  startas om eller uppdateras online för att få den senaste versionen.

@@ -31,5 +31,55 @@ $('newBtn').onclick=()=>{if(!confirm('Starta ny match? Alla tider nollställs, m
 function field(label,value,type='text'){const wrapper=el('label');wrapper.append(el('span','',label));const input=el('input');input.type=type;input.value=value;wrapper.append(input);return {wrapper,input}}
 function updateDraft(){draft=[];document.querySelectorAll('.rosterRow').forEach(row=>{const original=state.players.find(p=>p.id===row.dataset.id);draft.push({...original,id:row.dataset.id,name:row.querySelector('.editName').value.trim(),number:row.querySelector('.editNumber').value.replace(/\D/g,'').slice(0,3),preferred:row.querySelector('.editPosition').value})})}
 function drawRoster(){const root=$('rosterRows');root.replaceChildren();draft.forEach(p=>{const row=el('div','rosterRow');row.dataset.id=p.id;const name=field('Namn',p.name),num=field('Tröjnummer',p.number||'','text');name.input.className='editName';num.input.className='editNumber';num.input.inputMode='numeric';num.input.pattern='[0-9]*';num.input.maxLength=3;row.append(name.wrapper,num.wrapper);const lab=el('label','positionField');lab.append(el('span','','Grundposition'));const select=el('select','editPosition');POS.forEach(pos=>{const opt=el('option','',`${pos} – ${TITLES[pos]}`);opt.value=pos;opt.selected=pos===p.preferred;select.append(opt)});lab.append(select);row.append(lab);if(elapsed()===0){const remove=el('button','remove','Ta bort spelare');remove.type='button';remove.onclick=()=>{updateDraft();draft=draft.filter(item=>item.id!==p.id);drawRoster()};row.append(remove)}root.append(row)})}
+// Roster-only sharing: no game clocks, player IDs, or statistics leave this device.
+// A URL fragment is processed locally by the recipient's browser.
+const SHARE_PARAM='lag';
+function rosterPayload(){
+  return {v:1,players:state.players.map(p=>({name:p.name,number:p.number||'',preferred:p.preferred,court:p.court}))};
+}
+function encodeRoster(data){
+  const bytes=new TextEncoder().encode(JSON.stringify(data));
+  let binary='';for(const byte of bytes)binary+=String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function decodeRoster(encoded){
+  if(encoded.length>12000||! /^[a-zA-Z0-9_-]+$/.test(encoded))throw Error('Ogiltig eller för stor delningslänk.');
+  const base64=encoded.replace(/-/g,'+').replace(/_/g,'/');
+  const binary=atob(base64.padEnd(Math.ceil(base64.length/4)*4,'='));
+  const bytes=Uint8Array.from(binary,c=>c.charCodeAt(0));
+  const value=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
+  if(!value||value.v!==1||!Array.isArray(value.players)||value.players.length<1||value.players.length>50)throw Error('Fel format på spelarlistan.');
+  const occupied=[];
+  const roster=value.players.map(p=>{
+    if(!p||typeof p.name!=='string'||!p.name.trim()||p.name.length>80||typeof p.number!=='string'||!/^\d{0,3}$/.test(p.number)||!POS.includes(p.preferred)||!(p.court===null||POS.includes(p.court)))throw Error('Spelarlistan innehåller ogiltiga uppgifter.');
+    if(p.court)occupied.push(p.court);
+    return {id:uid(),name:p.name.trim(),number:p.number,preferred:p.preferred,court:p.court,courtDone:0,benchDone:0,stintStart:0};
+  });
+  if(new Set(occupied).size!==occupied.length)throw Error('Två spelare har samma plats på planen.');
+  return roster;
+}
+function shareURL(){const u=new URL(location.href);u.hash=SHARE_PARAM+'='+encodeRoster(rosterPayload());return u.href}
+$('shareRosterBtn').onclick=async()=>{
+  const url=shareURL();
+  const message='Handbollsbyten – importera vår spelarlista (namn, nummer och positioner; inga matchtider):';
+  try{
+    if(navigator.share){await navigator.share({title:'Handbollsbyten – spelarlista',text:message,url});return}
+    if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(url);alert('Länken till spelarlistan är kopierad. Skicka den till de andra föräldrarna.');return}
+  }catch(e){if(e.name==='AbortError')return}
+  prompt('Kopiera länken och skicka till de andra föräldrarna:',url);
+};
+function importFromLink(){
+  const hash=location.hash.startsWith('#')?location.hash.slice(1):'';
+  if(!hash.startsWith(SHARE_PARAM+'='))return;
+  let incoming;
+  try{incoming=decodeRoster(hash.slice(SHARE_PARAM.length+1))}
+  catch(e){alert('Det gick inte att läsa den delade spelarlistan: '+e.message);return}
+  if(storageError){alert('Kunde inte läsa nuvarande sparade match. Import avbryts för att skydda dina data.');return}
+  const accepted=confirm(`Importera ${incoming.length} spelare?\n\nDin nuvarande spelarlista och alla matchtider på den här enheten ersätts. Den delade länken innehåller bara namn, tröjnummer och positioner.\n\nTryck Avbryt om du vill behålla nuvarande match.`);
+  if(!accepted)return;
+  change(()=>{state={version:1,players:incoming,half:1,elapsedBefore:0,runStarted:null,halfStart:0,finished:false};selected=null});
+  history.replaceState(null,'',location.pathname+location.search);
+  alert('Spelarlistan har importerats. Du kan nu börja en ny match.');
+}
 $('rosterBtn').onclick=()=>{draft=structuredClone(state.players);drawRoster();$('rosterDialog').showModal()};$('closeRoster').onclick=()=>$('rosterDialog').close();$('addPlayer').onclick=()=>{updateDraft();draft.push({id:uid(),name:'',number:'',preferred:'M9',court:null,courtDone:0,benchDone:0,stintStart:elapsed()});drawRoster();const inputs=document.querySelectorAll('.editName');inputs[inputs.length-1]?.focus()};$('saveRoster').onclick=()=>{updateDraft();if(!draft.length||draft.some(p=>!p.name)){alert('Alla spelare måste ha ett namn.');return}if(elapsed()>0&&state.players.some(p=>!draft.find(d=>d.id===p.id))){alert('Efter matchstart går det inte att ta bort spelare.');return}change(()=>state.players=draft);$('rosterDialog').close()};
-render();setInterval(()=>{if(state.runStarted!==null)render()},1000);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')render();else persist()});window.addEventListener('pagehide',persist);if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{});
+render();importFromLink();window.addEventListener('hashchange',importFromLink);setInterval(()=>{if(state.runStarted!==null)render()},1000);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')render();else persist()});window.addEventListener('pagehide',persist);if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{});
