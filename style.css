@@ -4,3 +4,5 @@
 
 /* Give iPhone web views room below the system status bar. */
 @media (max-width:700px){.topbar{padding-top:calc(48px + env(safe-area-inset-top))}}
+
+#importLink{width:100%;padding:12px;border:1px solid #adbed6;border-radius:10px;font-size:16px;resize:vertical;min-height:96px;margin:6px 0 10px} .paste-label{font-size:13px;font-weight:700;color:#334b6b}.header-actions{flex-wrap:wrap}.topbar{align-items:flex-start}@media(max-width:600px){.header-actions{max-width:57%}.header-actions button{font-size:11px;padding:8px}.brand img{width:36px;height:36px}}
