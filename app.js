@@ -102,12 +102,16 @@ function shareURL(){
 }
 $('shareRosterBtn').onclick=async()=>{
   const url=shareURL();
-  const message='Handbollsbyten – importera vår spelarlista (namn, nummer och positioner; inga matchtider):';
-  try{
-    if(navigator.share){await navigator.share({title:'Handbollsbyten – spelarlista',text:message,url});return}
-    if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(url);alert('Länken till spelarlistan är kopierad. Skicka den till de andra föräldrarna.');return}
-  }catch(e){if(e.name==='AbortError')return}
-  prompt('Kopiera länken och skicka till de andra föräldrarna:',url);
+  // Copy a plain text URL: never pass it to the iOS share sheet as a URL item.
+  try {
+    if(navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(url);
+      alert('Hela länken är kopierad som text. Klistra in den i WhatsApp eller Messenger.');
+      return;
+    }
+  } catch(e) { /* Fall back to a selectable text field. */ }
+  // Fallback for browsers that do not allow programmatic clipboard access.
+  prompt('Kopiera hela länken och klistra in den i meddelandet:', url);
 };
 function importRosterText(text){
   const source=text.trim();
