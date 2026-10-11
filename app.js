@@ -35,7 +35,7 @@ function drawRoster(){const root=$('rosterRows');root.replaceChildren();draft.fo
 // A URL fragment is processed locally by the recipient's browser.
 const SHARE_PARAM='lag';
 function rosterPayload(){
-  return {v:1,players:state.players.map(p=>({name:p.name,number:p.number||'',preferred:p.preferred,court:p.court}))};
+  return {v:1,players:state.players.map(p=>({name:p.name,number:String(p.number??''),preferred:p.preferred,court:p.court??null}))};
 }
 function encodeRoster(data){
   const bytes=new TextEncoder().encode(JSON.stringify(data));
@@ -43,20 +43,33 @@ function encodeRoster(data){
   return btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 }
 function decodeRoster(encoded){
-  if(encoded.length>12000||! /^[a-zA-Z0-9_-]+$/.test(encoded))throw Error('Ogiltig eller för stor delningslänk.');
-  const base64=encoded.replace(/-/g,'+').replace(/_/g,'/');
-  const binary=atob(base64.padEnd(Math.ceil(base64.length/4)*4,'='));
-  const bytes=Uint8Array.from(binary,c=>c.charCodeAt(0));
-  const value=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
-  if(!value||value.v!==1||!Array.isArray(value.players)||value.players.length<1||value.players.length>50)throw Error('Fel format på spelarlistan.');
-  const occupied=[];
-  const roster=value.players.map(p=>{
-    if(!p||typeof p.name!=='string'||!p.name.trim()||p.name.length>80||typeof p.number!=='string'||!/^\d{0,3}$/.test(p.number)||!POS.includes(p.preferred)||!(p.court===null||POS.includes(p.court)))throw Error('Spelarlistan innehåller ogiltiga uppgifter.');
-    if(p.court)occupied.push(p.court);
-    return {id:uid(),name:p.name.trim(),number:p.number,preferred:p.preferred,court:p.court,courtDone:0,benchDone:0,stintStart:0};
+  if(encoded.length>20000||!/^[a-zA-Z0-9_-]+$/.test(encoded))throw Error('Delningskoden är ogiltig eller för stor.');
+  let value;
+  try {
+    const binary=atob(encoded.replace(/-/g,'+').replace(/_/g,'/').padEnd(Math.ceil(encoded.length/4)*4,'='));
+    value=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(Uint8Array.from(binary,c=>c.charCodeAt(0))));
+  } catch(e){throw Error('Det går inte att avkoda spelarlistan. Kopiera hela länken igen.');}
+  const list=Array.isArray(value)?value:value?.players;
+  if(!Array.isArray(list)||list.length<1||list.length>50)throw Error('Länken innehåller inte en giltig spelarlista.');
+  const occupied=new Set();
+  return list.map((p,i)=>{
+    if(!p||typeof p!=='object')throw Error(`Spelare ${i+1} har fel format.`);
+    const name=typeof p.name==='string'?p.name.trim():'';
+    if(!name||name.length>80)throw Error(`Spelare ${i+1} saknar ett giltigt namn.`);
+    const rawNumber=p.number??p.jerseyNumber??'';
+    const number=String(rawNumber).trim().replace(/^#/,'');
+    if(!/^\d{0,3}$/.test(number))throw Error(`Tröjnumret för ${name} är ogiltigt.`);
+    const preferred=p.preferred??p.preferredPosition??p.position??'M9';
+    if(!POS.includes(preferred))throw Error(`Grundpositionen för ${name} är ogiltig.`);
+    // Earlier versions sometimes omitted court entirely for bench players.
+    let court=p.court??p.courtPosition??null;
+    if(court!==null&&!POS.includes(court))throw Error(`Planpositionen för ${name} är ogiltig.`);
+    if(court!==null){
+      if(occupied.has(court))throw Error(`Två spelare är placerade på ${court}.`);
+      occupied.add(court);
+    }
+    return {id:uid(),name,number,preferred,court,courtDone:0,benchDone:0,stintStart:0};
   });
-  if(new Set(occupied).size!==occupied.length)throw Error('Två spelare har samma plats på planen.');
-  return roster;
 }
 function shareURL(){const u=new URL(location.href);u.hash=SHARE_PARAM+'='+encodeRoster(rosterPayload());return u.href}
 $('shareRosterBtn').onclick=async()=>{
@@ -76,7 +89,7 @@ function importRosterText(text){
   try {
     if(source.startsWith('#'))encoded=source.slice(1);
     else if(source.startsWith('lag='))encoded=source;
-    else {const url=new URL(source);encoded=url.hash.slice(1);}
+    else {const found=source.match(/https?:\/\/[^\s<>]+/);const url=new URL(found?found[0]:source);encoded=url.hash.slice(1);}
     encoded=decodeURIComponent(encoded);
   } catch(e) {throw Error('Det här verkar inte vara en giltig delningslänk.');}
   if(!encoded.startsWith(SHARE_PARAM+'='))throw Error('Länken saknar spelarlistan (#lag=...). Be avsändaren skapa en ny länk med Dela lag.');
@@ -86,7 +99,8 @@ function applyIncomingRoster(incoming){
   const message=storageError
     ? `Den sparade matchen på telefonen kunde inte läsas. Vill du importera ${incoming.length} spelare och ersätta den gamla matchen? Vi försöker först spara en kopia.`
     : `Importera ${incoming.length} spelare? Detta ersätter den nuvarande spelarlistan och matchtiderna på den här telefonen. En lokal säkerhetskopia görs först.`;
-  if(!confirm(message))return false;
+  const preview=incoming.map(p=>`${p.number?'#'+p.number+' ':''}${p.name}`).join(', ');
+  if(!confirm(message+'\n\nSpelare: '+preview))return false;
   // No modifications until the payload is decoded, validated and user has approved.
   const replacement={version:1,players:incoming,half:1,elapsedBefore:0,runStarted:null,halfStart:0,finished:false};
   if(!valid(replacement))throw Error('Den delade listan innehåller ogiltiga uppgifter.');
