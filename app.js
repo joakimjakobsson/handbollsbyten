@@ -71,7 +71,12 @@ function decodeRoster(encoded){
     return {id:uid(),name,number,preferred,court,courtDone:0,benchDone:0,stintStart:0};
   });
 }
-function shareURL(){const u=new URL(location.href);u.hash=SHARE_PARAM+'='+encodeRoster(rosterPayload());return u.href}
+function shareURL(){
+  // Query parameter survives redirects and common messaging/PWA link handoffs better than fragments.
+  const u=new URL('./',location.href);
+  u.searchParams.set(SHARE_PARAM,encodeRoster(rosterPayload()));
+  return u.href;
+}
 $('shareRosterBtn').onclick=async()=>{
   const url=shareURL();
   const message='Handbollsbyten – importera vår spelarlista (namn, nummer och positioner; inga matchtider):';
@@ -84,16 +89,26 @@ $('shareRosterBtn').onclick=async()=>{
 function importRosterText(text){
   const source=text.trim();
   if(!source)throw Error('Klistra in en delningslänk först.');
-  // Accept either a full URL or the #lag= fragment, including URL-encoded fragments.
   let encoded='';
   try {
-    if(source.startsWith('#'))encoded=source.slice(1);
-    else if(source.startsWith('lag='))encoded=source;
-    else {const found=source.match(/https?:\/\/[^\s<>]+/);const url=new URL(found?found[0]:source);encoded=url.hash.slice(1);}
-    encoded=decodeURIComponent(encoded);
+    if(source.startsWith('#lag=')||source.startsWith('?lag=')||source.startsWith('lag=')) {
+      const token=source.replace(/^[#?]/,'');
+      encoded=new URLSearchParams(token).get(SHARE_PARAM)||'';
+    } else {
+      // Accept link text copied from a message, not only a raw URL.
+      const found=source.match(/https?:\/\/[^\s<>]+/);
+      const url=new URL(found?found[0]:source);
+      encoded=url.searchParams.get(SHARE_PARAM)||new URLSearchParams(url.hash.slice(1)).get(SHARE_PARAM)||'';
+    }
   } catch(e) {throw Error('Det här verkar inte vara en giltig delningslänk.');}
-  if(!encoded.startsWith(SHARE_PARAM+'='))throw Error('Länken saknar spelarlistan (#lag=...). Be avsändaren skapa en ny länk med Dela lag.');
-  return decodeRoster(encoded.slice(SHARE_PARAM.length+1));
+  if(!encoded)throw Error('Länken saknar spelarlistan (lag=...). Öppna länken direkt eller be avsändaren dela igen.');
+  return decodeRoster(encoded);
+}
+function clearShareParameters(){
+  const u=new URL(location.href);
+  u.searchParams.delete(SHARE_PARAM);
+  if(u.hash.startsWith('#lag='))u.hash='';
+  history.replaceState(null,'',u.pathname+u.search+u.hash);
 }
 function applyIncomingRoster(incoming){
   const message=storageError
@@ -112,29 +127,31 @@ function applyIncomingRoster(incoming){
   alert(`${incoming.length} spelare har importerats. Öppna Spelare för att kontrollera namnen.`);
   return true;
 }
+let importingLink=false;
 function importFromLink(){
-  const hash=location.hash.slice(1);
-  if(!hash.startsWith(SHARE_PARAM+'='))return;
-  // Show the imported URL in the text field as a fallback if the user cancels.
-  $('importLink').value=location.href;
-  try{
-    const incoming=importRosterText(location.href);
+  const url=new URL(location.href);
+  if(!url.searchParams.has(SHARE_PARAM)&&!url.hash.startsWith('#lag='))return;
+  if(importingLink)return;
+  importingLink=true;
+  $('importLink').value=url.href;
+  try {
+    const incoming=importRosterText(url.href);
     if(applyIncomingRoster(incoming)){
-      history.replaceState(null,'',location.pathname+location.search);
+      clearShareParameters();
       $('importDialog').close();
     }
-  }catch(e){
+  } catch(e){
     $('importError').textContent=e.message;
     $('importError').hidden=false;
-    $('importDialog').showModal();
-  }
+    if(!$('importDialog').open)$('importDialog').showModal();
+  } finally {importingLink=false;}
 }
 $('importRosterBtn').onclick=()=>{$('importError').hidden=true;$('importDialog').showModal();};
 $('closeImport').onclick=()=>$('importDialog').close();
 $('confirmImport').onclick=()=>{
   $('importError').hidden=true;
-  try{const incoming=importRosterText($('importLink').value);if(applyIncomingRoster(incoming)){$('importDialog').close();if(location.hash.startsWith('#lag='))history.replaceState(null,'',location.pathname+location.search);}}
+  try{const incoming=importRosterText($('importLink').value);if(applyIncomingRoster(incoming)){$('importDialog').close();clearShareParameters();}}
   catch(e){$('importError').textContent=e.message;$('importError').hidden=false;}
 };
 $('rosterBtn').onclick=()=>{draft=structuredClone(state.players);drawRoster();$('rosterDialog').showModal()};$('closeRoster').onclick=()=>$('rosterDialog').close();$('addPlayer').onclick=()=>{updateDraft();draft.push({id:uid(),name:'',number:'',preferred:'M9',court:null,courtDone:0,benchDone:0,stintStart:elapsed()});drawRoster();const inputs=document.querySelectorAll('.editName');inputs[inputs.length-1]?.focus()};$('saveRoster').onclick=()=>{updateDraft();if(!draft.length||draft.some(p=>!p.name)){alert('Alla spelare måste ha ett namn.');return}if(elapsed()>0&&state.players.some(p=>!draft.find(d=>d.id===p.id))){alert('Efter matchstart går det inte att ta bort spelare.');return}change(()=>state.players=draft);$('rosterDialog').close()};
-render();importFromLink();window.addEventListener('hashchange',importFromLink);setInterval(()=>{if(state.runStarted!==null)render()},1000);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')render();else persist()});window.addEventListener('pagehide',persist);if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{});
+render();importFromLink();window.addEventListener('hashchange',importFromLink);window.addEventListener('popstate',importFromLink);window.addEventListener('pageshow',importFromLink);setInterval(()=>{if(state.runStarted!==null)render()},1000);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')render();else persist()});window.addEventListener('pagehide',persist);if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{});
