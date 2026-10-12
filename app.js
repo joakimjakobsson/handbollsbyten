@@ -6,7 +6,37 @@ const $=id=>document.getElementById(id);
 const uid=()=>crypto.randomUUID?crypto.randomUUID():String(Date.now()+Math.random());
 function initial(){const players=POS.map((pos,i)=>({id:uid(),name:`Spelare ${i+1}`,number:'',preferred:pos,court:pos,courtDone:0,benchDone:0,stintStart:0}));['V9','H9','M6'].forEach((pos,i)=>players.push({id:uid(),name:`Spelare ${i+8}`,number:'',preferred:pos,court:null,courtDone:0,benchDone:0,stintStart:0}));return {version:1,players,half:1,elapsedBefore:0,runStarted:null,halfStart:0,finished:false}};
 function valid(m){return m&&m.version===1&&Array.isArray(m.players)&&m.players.length>0&&[1,2].includes(m.half)&&Number.isFinite(m.elapsedBefore)&&m.elapsedBefore>=0&&Number.isFinite(m.halfStart)&&m.halfStart<=m.elapsedBefore&&(m.runStarted===null||Number.isFinite(m.runStarted))&&(!m.finished||m.runStarted===null)&&new Set(m.players.map(p=>p.id)).size===m.players.length&&new Set(m.players.map(p=>p.court).filter(Boolean)).size===m.players.filter(p=>p.court).length&&m.players.every(p=>typeof p.name==='string'&&p.name.trim()&&POS.includes(p.preferred)&&(p.court===null||POS.includes(p.court))&&['courtDone','benchDone','stintStart'].every(k=>Number.isFinite(p[k])&&p[k]>=0));}
-let state;let storageError='';try{const raw=localStorage.getItem(KEY);state=raw?JSON.parse(raw):initial();if(!valid(state))throw Error('Ogiltig sparad match');}catch(e){state=initial();storageError=`Det gick inte att läsa den sparade matchen (${e.message}). Ingenting skrivs över förrän du återställer lagringen.`;}
+// Repair only the known legacy bug: newly added players could lack clock fields.
+// Make an untouched backup first, and never reset other players or match progress.
+function repairMissingPlayerTimes(m){
+  if(!m||m.version!==1||!Array.isArray(m.players)||!Number.isFinite(m.elapsedBefore))return null;
+  let changed=false;
+  const copy=structuredClone(m);
+  for(const p of copy.players){
+    for(const key of ['courtDone','benchDone']){
+      if(p[key]===null||p[key]===undefined){p[key]=0;changed=true;}
+    }
+    if(p.stintStart===null||p.stintStart===undefined){
+      // Late additions started on the bench at the current match time.
+      p.stintStart=copy.elapsedBefore+(copy.runStarted!==null?Math.max(0,(Date.now()-copy.runStarted)/1000):0);
+      changed=true;
+    }
+  }
+  return changed&&valid(copy)?copy:null;
+}
+let state;let storageError='';let repairMessage='';
+try{
+  const raw=localStorage.getItem(KEY);
+  state=raw?JSON.parse(raw):initial();
+  if(!valid(state)){
+    const fixed=repairMissingPlayerTimes(state);
+    if(!fixed)throw Error('Ogiltig sparad match');
+    localStorage.setItem(KEY+'-backup-before-clock-repair-'+Date.now(),raw);
+    localStorage.setItem(KEY,JSON.stringify(fixed));
+    state=fixed;
+    repairMessage='En äldre tidsbugg i en tillagd spelare har reparerats. Den ursprungliga matchen har säkerhetskopierats lokalt.';
+  }
+}catch(e){state=initial();storageError=`Det gick inte att läsa den sparade matchen (${e.message}). Ingenting skrivs över förrän du återställer lagringen.`;}
 let selected=null, draft=null;
 const elapsed=(now=Date.now())=>state.elapsedBefore+(state.runStarted!==null?Math.max(0,(now-state.runStarted)/1000):0);
 const halfElapsed=()=>Math.max(0,elapsed()-state.halfStart);
@@ -44,7 +74,7 @@ function makeRow(p,t,rank){
   }
   return row;
 }
-function render(){prepareShareLink();const t=elapsed();$('clock').textContent=fmt(halfElapsed());$('halfLabel').textContent=state.finished?'MATCH AVSLUTAD':`HALVLEK ${state.half}`;$('totalTime').textContent=`Totalt ${fmt(t)} · ${state.finished?'Avslutad':state.runStarted!==null?'Pågår':'Pausad'}`;$('toggleBtn').textContent=state.runStarted!==null?'Ⅱ Pausa':'▶ Starta';$('toggleBtn').disabled=state.finished||!!storageError;$('halfBtn').textContent=state.half===1?'Halvtid':'Avsluta';$('halfBtn').disabled=state.finished||halfElapsed()===0||!!storageError;$('rosterBtn').disabled=state.runStarted!==null||!!storageError;$('storageWarning').hidden=!storageError;$('storageWarning').textContent=storageError;
+function render(){prepareShareLink();const t=elapsed();$('clock').textContent=fmt(halfElapsed());$('halfLabel').textContent=state.finished?'MATCH AVSLUTAD':`HALVLEK ${state.half}`;$('totalTime').textContent=`Totalt ${fmt(t)} · ${state.finished?'Avslutad':state.runStarted!==null?'Pågår':'Pausad'}`;$('toggleBtn').textContent=state.runStarted!==null?'Ⅱ Pausa':'▶ Starta';$('toggleBtn').disabled=state.finished||!!storageError;$('halfBtn').textContent=state.half===1?'Halvtid':'Avsluta';$('halfBtn').disabled=state.finished||halfElapsed()===0||!!storageError;$('rosterBtn').disabled=state.runStarted!==null||!!storageError;$('storageWarning').hidden=!(storageError||repairMessage);$('storageWarning').textContent=storageError||repairMessage;
 const chosen=state.players.find(x=>x.id===selected);$('hint').textContent=chosen?`Vald: ${chosen.name}. ${chosen.court?'Tryck på en bänkspelare för byte eller en planspelare för positionsbyte.':'Tryck på spelaren som ska ut eller på en tom position.'} (Tryck samma spelare för att avbryta.)`:'Välj först en bänkspelare och sedan spelaren på planen som ska ut.';$('hint').classList.toggle('has-selection',!!chosen);
 const ranks=state.players.filter(p=>p.court&&p.court!=='MV').sort((a,b)=>current(b,t)-current(a,t)||a.name.localeCompare(b.name,'sv'));const ranking=new Map(ranks.slice(0,2).map((p,i)=>[p.id,i+1]));const court=$('court');court.replaceChildren();POS.forEach(pos=>{const p=state.players.find(p=>p.court===pos);if(p){court.append(makeRow(p,t,ranking.get(p.id)||0));return}const btn=el('button','player empty'+(chosen?' can-enter':''),`${pos} · Tom plats ${chosen?'· Tryck för att sätta in':''}`);btn.disabled=!chosen||state.finished;btn.onclick=()=>change(()=>{move(chosen.id,pos);selected=null});court.append(btn)});$('courtCount').textContent=`${state.players.filter(p=>p.court).length}/7`;const bench=state.players.filter(p=>!p.court).sort((a,b)=>a.stintStart-b.stintStart||a.name.localeCompare(b.name,'sv'));$('bench').replaceChildren(...bench.map(p=>makeRow(p,t,0)));$('benchCount').textContent=`${bench.length} spelare`;
 }
@@ -52,7 +82,23 @@ $('toggleBtn').onclick=()=>change(()=>{if(state.runStarted!==null){state.elapsed
 $('halfBtn').onclick=()=>{if(state.half===1){if(!confirm('Gå till halvlek 2? Klockan pausas och halvleken börjar på 00:00. Totaltiderna sparas.'))return;change(()=>{state.elapsedBefore=elapsed();state.runStarted=null;state.half=2;state.halfStart=state.elapsedBefore;selected=null})}else{if(!confirm('Avsluta matchen? Du kan se statistiken tills du startar ny match.'))return;change(()=>{state.elapsedBefore=elapsed();state.runStarted=null;state.finished=true;selected=null})}};
 $('newBtn').onclick=()=>{if(!confirm('Starta ny match? Alla tider nollställs, men spelarnamn, nummer och positioner behålls.'))return;if(storageError){if(!confirm('Sparade data kunde inte läsas. Vill du verkligen skriva över dem med en ny match?'))return;storageError=''}change(()=>{state.half=1;state.elapsedBefore=0;state.runStarted=null;state.halfStart=0;state.finished=false;state.players.forEach(p=>{p.courtDone=0;p.benchDone=0;p.stintStart=0});selected=null})};
 function field(label,value,type='text'){const wrapper=el('label');wrapper.append(el('span','',label));const input=el('input');input.type=type;input.value=value;wrapper.append(input);return {wrapper,input}}
-function updateDraft(){draft=[];document.querySelectorAll('.rosterRow').forEach(row=>{const original=state.players.find(p=>p.id===row.dataset.id);draft.push({...original,id:row.dataset.id,name:row.querySelector('.editName').value.trim(),number:row.querySelector('.editNumber').value.replace(/\D/g,'').slice(0,3),preferred:row.querySelector('.editPosition').value})})}
+function updateDraft(){
+  const known=new Map([...state.players,...draft].map(p=>[p.id,p]));
+  const matchTime=elapsed();
+  draft=[...document.querySelectorAll('.rosterRow')].map(row=>{
+    const original=known.get(row.dataset.id)||{};
+    return {
+      id:row.dataset.id,
+      name:row.querySelector('.editName').value.trim(),
+      number:row.querySelector('.editNumber').value.replace(/\D/g,'').slice(0,3),
+      preferred:row.querySelector('.editPosition').value,
+      court:original.court??null,
+      courtDone:Number.isFinite(original.courtDone)?original.courtDone:0,
+      benchDone:Number.isFinite(original.benchDone)?original.benchDone:0,
+      stintStart:Number.isFinite(original.stintStart)?original.stintStart:matchTime
+    };
+  });
+}
 function drawRoster(){const root=$('rosterRows');root.replaceChildren();draft.forEach(p=>{const row=el('div','rosterRow');row.dataset.id=p.id;const name=field('Namn',p.name),num=field('Tröjnummer',p.number||'','text');name.input.className='editName';num.input.className='editNumber';num.input.inputMode='numeric';num.input.pattern='[0-9]*';num.input.maxLength=3;row.append(name.wrapper,num.wrapper);const lab=el('label','positionField');lab.append(el('span','','Grundposition'));const select=el('select','editPosition');POS.forEach(pos=>{const opt=el('option','',`${pos} – ${TITLES[pos]}`);opt.value=pos;opt.selected=pos===p.preferred;select.append(opt)});lab.append(select);row.append(lab);if(elapsed()===0){const remove=el('button','remove','Ta bort spelare');remove.type='button';remove.onclick=()=>{updateDraft();draft=draft.filter(item=>item.id!==p.id);drawRoster()};row.append(remove)}root.append(row)})}
 // Roster-only sharing: no game clocks, player IDs, or statistics leave this device.
 // A URL fragment is processed locally by the recipient's browser.
