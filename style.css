@@ -59,3 +59,10 @@
 .groupIncoming select{font-size:16px;max-width:100%;width:100%;padding:11px;border-radius:10px;border:1px solid #a6b9d6;background:#fff;color:#152e50}
 .groupStatus{padding:10px 12px;background:#e9f2ff;color:#23487e;border-radius:10px;font-size:13px}
 .groupStatus.groupError{background:#fff0ef;color:#982e3b}
+
+/* v15: bench time first, with optional preference for usual positions */
+.groupPreference{display:flex;align-items:flex-start;gap:12px;padding:12px;margin:10px 0;border-radius:12px;background:#e9f2ff;color:#203d69;cursor:pointer}
+.groupPreference input{width:22px;height:22px;flex:0 0 22px;margin:2px 0 0}
+.groupPreference span{display:grid;gap:4px;min-width:0}
+.groupPreference strong{font-size:15px}
+.groupPreference small{font-size:12px;line-height:1.4;color:#506986}

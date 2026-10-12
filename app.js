@@ -346,24 +346,49 @@ function candidateBench(){
   return state.players.filter(p=>p.court===null).sort((a,b)=>a.stintStart-b.stintStart||a.name.localeCompare(b.name,'sv'));
 }
 function groupCourt(){return POS.filter(pos=>pos!=='MV').map(pos=>[pos,state.players.find(p=>p.court===pos)]).filter(([,p])=>!!p);}
+let groupAllMode=false;
+function recommendGroup(all){
+  const court=groupCourt(), available=candidateBench();
+  groupAssignments=new Map();
+  if(!all)return;
+  const pool=available.slice(0,6); // Always select the six with longest current bench time.
+  const remaining=[...pool];
+  if($('groupPreferPosition').checked){
+    for(const [pos] of court){
+      const index=remaining.findIndex(p=>p.preferred===pos);
+      if(index>=0)groupAssignments.set(pos,remaining.splice(index,1)[0].id);
+    }
+  }
+  for(const [pos] of court)if(!groupAssignments.has(pos)&&remaining.length)groupAssignments.set(pos,remaining.shift().id);
+}
 function proposeGroup(all){
   const court=groupCourt(), available=candidateBench();
   if(!available.length){alert('Det finns inga spelare på bänken att byta in.');return;}
   if(all&&court.length!==6){alert('Byt alla utespelare kräver sex utespelare på planen. Använd Gruppbyte för ett mindre byte.');return;}
   if(all&&available.length<6){alert(`Det behövs sex bänkspelare för ett helt byte. Nu finns ${available.length}. Använd Gruppbyte för färre spelare.`);return;}
-  groupAssignments=new Map();
-  if(all){
-    const pool=available.slice(0,6); // Longest on bench, with position preference where possible.
-    const remaining=[...pool];
-    for(const [pos] of court){
-      const index=remaining.findIndex(p=>p.preferred===pos);
-      if(index>=0)groupAssignments.set(pos,remaining.splice(index,1)[0].id);
-    }
-    for(const [pos] of court)if(!groupAssignments.has(pos))groupAssignments.set(pos,remaining.shift().id);
-  }
+  groupAllMode=all;
+  // The checkbox resets to bench-time order each time the dialog opens.
+  $('groupPreferPosition').checked=false;
+  recommendGroup(all);
   $('groupTitle').textContent=all?'Byt alla utespelare':'Gruppbyte';
   drawGroup();$('groupDialog').showModal();
 }
+$('groupPreferPosition').addEventListener('change',()=>{
+  // Changing the preference explicitly rebuilds proposed assignments.
+  // For a manually selected group, preserve selected outgoing positions.
+  if(groupAllMode)recommendGroup(true);
+  else{
+    const positions=[...groupAssignments.keys()];
+    groupAssignments=new Map();
+    const remaining=candidateBench();
+    for(const pos of positions){
+      let idx=$('groupPreferPosition').checked?remaining.findIndex(p=>p.preferred===pos):-1;
+      if(idx<0)idx=0;
+      if(remaining.length)groupAssignments.set(pos,remaining.splice(idx,1)[0].id);
+    }
+  }
+  drawGroup();
+});
 function drawGroup(){
   const target=$('groupRows');target.replaceChildren();
   const available=candidateBench(), court=groupCourt();
@@ -374,7 +399,8 @@ function drawGroup(){
     check.addEventListener('change',()=>{
       if(!check.checked)groupAssignments.delete(pos);
       else {
-        const first=available.find(p=>!Array.from(groupAssignments.values()).includes(p.id)&&p.preferred===pos)||available.find(p=>!Array.from(groupAssignments.values()).includes(p.id));
+        const unused=available.filter(p=>!Array.from(groupAssignments.values()).includes(p.id));
+        const first=($('groupPreferPosition').checked&&unused.find(p=>p.preferred===pos))||unused[0];
         if(first)groupAssignments.set(pos,first.id);else check.checked=false;
       }
       drawGroup();
@@ -436,7 +462,7 @@ $('rosterBtn').onclick=()=>{draft=structuredClone(state.players);drawRoster();$(
   }
   change(()=>state.players=proposed.players);$('rosterDialog').close()};
 const versionTag=document.createElement('small');
-versionTag.textContent='Version 14 · gruppbyten';versionTag.style.cssText='display:block;color:#a8c0e8;font-size:11px;margin-top:3px';
+versionTag.textContent='Version 15 · bänktidsordning';versionTag.style.cssText='display:block;color:#a8c0e8;font-size:11px;margin-top:3px';
 const brand=document.querySelector('header .brand, .brand');if(brand)brand.append(versionTag);
 render();importFromLink();window.addEventListener('hashchange',importFromLink);window.addEventListener('popstate',importFromLink);window.addEventListener('pageshow',importFromLink);window.addEventListener('focus',importFromLink);// Update only text while the clock is running. Replacing rows each second
 // destroys touch targets before iOS dispatches click, requiring two taps.
