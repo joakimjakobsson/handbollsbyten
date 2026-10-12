@@ -1,33 +1,29 @@
-HANDBOLLSBYTEN - WEBBAPP
+Handbollsbyten – version 16: manuell bänkkö
 
-INNEHALL
-index.html, app.js, style.css, manifest.webmanifest, sw.js och icons/.
+Tryck på ⋯ bredvid en bänkspelare, eller håll inne på spelaren.
+Välj ”Flytta sist i kön”. Bänktiden behålls.
 
-PUBLICERA GRATIS MED GITHUB PAGES
-1. Skapa ett gratis konto pa https://github.com/ om du inte redan har det.
-2. Skapa ett nytt PUBLIC repository, exempelvis handbollsbyten.
-3. Packa upp ZIP-filen. Ladda upp filerna inuti mappen Handbollsbyten_webbapp
-   till repots rot (index.html ska ligga i roten, inte i en extra undermapp).
-4. Under Settings -> Pages: Source = Deploy from a branch.
-   Valj branch main och folder /(root), och tryck Save.
-5. Efter publicering: https://DITTANVANDARNAMN.github.io/handbollsbyten/
-   Oppna pa iPhone via Safari och valj Dela -> Lagg till pa hemskarmen.
+Exempel: A B C D E F G H
+Flytta B och D sist: A C E F G H B D.
+Efter byte av de första sex står B och D först på bänken.
+Spelare som går av planen hamnar efter dem.
 
-OBS
-- Webbappen maste serveras via HTTPS for offline-cache och installation.
-- Webbappen fungerar offline efter att filerna laddats och cachelagrats.
-- Spelare och matchdata sparas endast i aktuell webblasare pa aktuell enhet.
-- Rensas Safari-webbplatsdata kan informationen forsvinna.
-- Dela inte telefon mellan foraldrar om ni vill ha samma matchlage;
-  webbappen synkroniserar inte automatiskt mellan enheter.
-- Native iPhone-appens sparade data overfors inte automatiskt.
-- Testa alltid matchen och knappflodet innan ni anvander appen live.
+Gruppbyten följer bänkkön. Vid ”Byt alla utespelare” föreslås de
+sex första. Med grundposition på kan dessa sex placeras på andra
+positioner, men spelare längre bak väljs inte i deras ställe.
+Du kan fortfarande välja en annan spelare manuellt.
 
-DELA SPELARLISTAN
-- Tryck "Dela lag" och dela länken via meddelande/WhatsApp.
-- Den som öppnar länken på sin telefon får bekräfta att hela lokala matchen
-  ersätts med spelarlistan från länken (matchtider importeras inte).
-- Länken innehåller namn, tröjnummer, grundposition och aktuell
-  planposition. Den har ingen åtkomstkontroll: dela endast med avsedda personer.
-- Efter uppladdning av nya filer kan gamla installerade webbappar behöva
-  startas om eller uppdateras online för att få den senaste versionen.
+”Återställ efter bänktid” återgår till automatisk sortering efter
+längst sammanhängande bänktid. Ny match återställer också sorteringen.
+Den manuella kön sparas på enheten och ingår när gruppbyte ångras.
+Delning av lag delar spelarlistan, inte den manuella kön.
+
+Uppdatering:
+Packa upp zipfilen och ersätt den tidigare webbappens filer.
+Använd samma webbadress för att behålla den lokalt sparade matchen.
+Kontrollera att ”Version 16 · manuell bänkkö” visas efter uppdatering.
+
+Verifiering:
+Köordning, gruppbyte, ångra, tider, lokal sparning, enskilt byte,
+återställning och tillägg av spelare är kontrollerade i logiktester.
+Gränssnittet behöver provköras på iPhone före match.

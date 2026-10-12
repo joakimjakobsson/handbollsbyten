@@ -66,3 +66,11 @@
 .groupPreference span{display:grid;gap:4px;min-width:0}
 .groupPreference strong{font-size:15px}
 .groupPreference small{font-size:12px;line-height:1.4;color:#506986}
+
+/* v16: separate menu touch target, with no nested buttons. */
+.benchPlayer{display:flex;align-items:stretch;gap:5px;min-width:0}
+.benchPlayer .player{flex:1;min-width:0;gap:7px}
+.benchMenuButton{flex:0 0 44px;padding:8px 4px;background:#e9f2ff;color:#1c4684;font-size:23px;border:1px solid #c9d5e5}
+.resetBenchOrder{font-size:12px;padding:9px 12px;margin:0 0 12px;color:#255188}
+#benchMenuDialog .support{margin-top:14px}
+@media(max-width:400px){.benchPlayer .player{padding:9px 7px;gap:5px}.benchPlayer .numbers b{font-size:16px}.benchPlayer .numbers small{font-size:9px}.benchPlayer .jersey{min-width:26px;padding:6px 4px;font-size:13px}.benchPlayer .position{min-width:30px}}
