@@ -6,23 +6,26 @@ const $=id=>document.getElementById(id);
 const uid=()=>crypto.randomUUID?crypto.randomUUID():String(Date.now()+Math.random());
 function initial(){const players=POS.map((pos,i)=>({id:uid(),name:`Spelare ${i+1}`,number:'',preferred:pos,court:pos,courtDone:0,benchDone:0,stintStart:0}));['V9','H9','M6'].forEach((pos,i)=>players.push({id:uid(),name:`Spelare ${i+8}`,number:'',preferred:pos,court:null,courtDone:0,benchDone:0,stintStart:0}));return {version:1,players,half:1,elapsedBefore:0,runStarted:null,halfStart:0,finished:false}};
 function valid(m){return m&&m.version===1&&Array.isArray(m.players)&&m.players.length>0&&[1,2].includes(m.half)&&Number.isFinite(m.elapsedBefore)&&m.elapsedBefore>=0&&Number.isFinite(m.halfStart)&&m.halfStart<=m.elapsedBefore&&(m.runStarted===null||Number.isFinite(m.runStarted))&&(!m.finished||m.runStarted===null)&&new Set(m.players.map(p=>p.id)).size===m.players.length&&new Set(m.players.map(p=>p.court).filter(Boolean)).size===m.players.filter(p=>p.court).length&&m.players.every(p=>typeof p.name==='string'&&p.name.trim()&&POS.includes(p.preferred)&&(p.court===null||POS.includes(p.court))&&['courtDone','benchDone','stintStart'].every(k=>Number.isFinite(p[k])&&p[k]>=0));}
-// Repair only the known legacy bug: newly added players could lack clock fields.
-// Make an untouched backup first, and never reset other players or match progress.
+// Recover the known new-player clock corruption without discarding the roster.
+// Missing or JSON-null clocks were generated when NaN was serialized to JSON.
+// Never alter a finite clock value or recover malformed non-clock fields.
 function repairMissingPlayerTimes(m){
-  if(!m||m.version!==1||!Array.isArray(m.players)||!Number.isFinite(m.elapsedBefore))return null;
-  let changed=false;
+  if(!m || m.version!==1 || !Array.isArray(m.players) || !m.players.length ||
+     !Number.isFinite(m.elapsedBefore) || !Number.isFinite(m.halfStart) ||
+     !(m.runStarted===null || Number.isFinite(m.runStarted))) return null;
   const copy=structuredClone(m);
-  for(const p of copy.players){
+  const clock=copy.elapsedBefore + (copy.runStarted===null ? 0 : Math.max(0,(Date.now()-copy.runStarted)/1000));
+  let changed=false;
+  for(const player of copy.players){
     for(const key of ['courtDone','benchDone']){
-      if(p[key]===null||p[key]===undefined){p[key]=0;changed=true;}
+      if(player[key]===undefined || player[key]===null){player[key]=0;changed=true;}
     }
-    if(p.stintStart===null||p.stintStart===undefined){
-      // Late additions started on the bench at the current match time.
-      p.stintStart=copy.elapsedBefore+(copy.runStarted!==null?Math.max(0,(Date.now()-copy.runStarted)/1000):0);
-      changed=true;
+    if(player.stintStart===undefined || player.stintStart===null){
+      // Do not create historic bench time for a newly added player.
+      player.stintStart=clock;changed=true;
     }
   }
-  return changed&&valid(copy)?copy:null;
+  return changed && valid(copy) ? copy : null;
 }
 let state;let storageError='';let repairMessage='';
 try{
@@ -44,7 +47,13 @@ const fmt=s=>{s=Math.max(0,Math.floor(s));return `${String(Math.floor(s/60)).pad
 const current=(p,t)=>Math.max(0,t-p.stintStart);
 const courtTotal=(p,t)=>p.courtDone+(p.court?current(p,t):0);
 const benchTotal=(p,t)=>p.benchDone+(!p.court?current(p,t):0);
-function persist(){if(storageError)return;try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){storageError='Kunde inte spara lokalt. Stäng inte appen innan problemet lösts: '+e.message}}
+function persist(){
+  if(storageError)return;
+  if(!valid(state)){
+    storageError='Matchen innehåller ett ogiltigt tidvärde och sparades inte. Starta inte om appen innan felet är åtgärdat.';
+    render();return;
+  }
+  try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){storageError='Kunde inte spara lokalt. Stäng inte appen innan problemet lösts: '+e.message}}
 function change(fn){if(storageError)return;fn();persist();render()}
 function settle(p,t){if(p.court)p.courtDone+=current(p,t);else p.benchDone+=current(p,t);p.stintStart=t}
 function move(id,to){const p=state.players.find(x=>x.id===id);if(!p||state.finished||p.court===to)return;const old=p.court,t=elapsed(),other=state.players.find(x=>x.court===to&&to!==null);if(other){if(old===null){settle(p,t);settle(other,t)}other.court=old;p.court=to}else{if((old===null)!==(to===null))settle(p,t);p.court=to}}
@@ -83,10 +92,9 @@ $('halfBtn').onclick=()=>{if(state.half===1){if(!confirm('Gå till halvlek 2? Kl
 $('newBtn').onclick=()=>{if(!confirm('Starta ny match? Alla tider nollställs, men spelarnamn, nummer och positioner behålls.'))return;if(storageError){if(!confirm('Sparade data kunde inte läsas. Vill du verkligen skriva över dem med en ny match?'))return;storageError=''}change(()=>{state.half=1;state.elapsedBefore=0;state.runStarted=null;state.halfStart=0;state.finished=false;state.players.forEach(p=>{p.courtDone=0;p.benchDone=0;p.stintStart=0});selected=null})};
 function field(label,value,type='text'){const wrapper=el('label');wrapper.append(el('span','',label));const input=el('input');input.type=type;input.value=value;wrapper.append(input);return {wrapper,input}}
 function updateDraft(){
-  const known=new Map([...state.players,...draft].map(p=>[p.id,p]));
   const matchTime=elapsed();
   draft=[...document.querySelectorAll('.rosterRow')].map(row=>{
-    const original=known.get(row.dataset.id)||{};
+    const original=state.players.find(p=>p.id===row.dataset.id)||draft.find(p=>p.id===row.dataset.id)||{};
     return {
       id:row.dataset.id,
       name:row.querySelector('.editName').value.trim(),
@@ -330,7 +338,14 @@ $('confirmImport').onclick=async()=>{
   $('confirmImport').disabled=true;
   try{await previewImport(source);}finally{$('confirmImport').disabled=false;}
 };
-$('rosterBtn').onclick=()=>{draft=structuredClone(state.players);drawRoster();$('rosterDialog').showModal()};$('closeRoster').onclick=()=>$('rosterDialog').close();$('addPlayer').onclick=()=>{updateDraft();draft.push({id:uid(),name:'',number:'',preferred:'M9',court:null,courtDone:0,benchDone:0,stintStart:elapsed()});drawRoster();const inputs=document.querySelectorAll('.editName');inputs[inputs.length-1]?.focus()};$('saveRoster').onclick=()=>{updateDraft();if(!draft.length||draft.some(p=>!p.name)){alert('Alla spelare måste ha ett namn.');return}if(elapsed()>0&&state.players.some(p=>!draft.find(d=>d.id===p.id))){alert('Efter matchstart går det inte att ta bort spelare.');return}change(()=>state.players=draft);$('rosterDialog').close()};
+$('rosterBtn').onclick=()=>{draft=structuredClone(state.players);drawRoster();$('rosterDialog').showModal()};$('closeRoster').onclick=()=>$('rosterDialog').close();$('addPlayer').onclick=()=>{updateDraft();draft.push({id:uid(),name:'',number:'',preferred:'M9',court:null,courtDone:0,benchDone:0,stintStart:elapsed()});drawRoster();const inputs=document.querySelectorAll('.editName');inputs[inputs.length-1]?.focus()};$('saveRoster').onclick=()=>{updateDraft();if(!draft.length||draft.some(p=>!p.name)){alert('Alla spelare måste ha ett namn.');return}if(elapsed()>0&&state.players.some(p=>!draft.find(d=>d.id===p.id))){alert('Efter matchstart går det inte att ta bort spelare.');return}const proposed={...state,players:structuredClone(draft)};
+  if(!valid(proposed)){
+    alert('Spelarlistan innehåller ett ogiltigt tidvärde. Den har inte sparats.');return;
+  }
+  change(()=>state.players=proposed.players);$('rosterDialog').close()};
+const versionTag=document.createElement('small');
+versionTag.textContent='Version 12 · tidsfix 2';versionTag.style.cssText='display:block;color:#a8c0e8;font-size:11px;margin-top:3px';
+const brand=document.querySelector('header .brand, .brand');if(brand)brand.append(versionTag);
 render();importFromLink();window.addEventListener('hashchange',importFromLink);window.addEventListener('popstate',importFromLink);window.addEventListener('pageshow',importFromLink);window.addEventListener('focus',importFromLink);// Update only text while the clock is running. Replacing rows each second
 // destroys touch targets before iOS dispatches click, requiring two taps.
 function refreshClockText(){
