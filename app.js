@@ -41,6 +41,8 @@ try{
   }
 }catch(e){state=initial();storageError=`Det gick inte att läsa den sparade matchen (${e.message}). Ingenting skrivs över förrän du återställer lagringen.`;}
 let selected=null, draft=null;
+let groupUndo=null; // In-memory undo; expires after the next state change or page reload.
+let groupAssignments=new Map();
 const elapsed=(now=Date.now())=>state.elapsedBefore+(state.runStarted!==null?Math.max(0,(now-state.runStarted)/1000):0);
 const halfElapsed=()=>Math.max(0,elapsed()-state.halfStart);
 const fmt=s=>{s=Math.max(0,Math.floor(s));return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`};
@@ -54,7 +56,7 @@ function persist(){
     render();return;
   }
   try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){storageError='Kunde inte spara lokalt. Stäng inte appen innan problemet lösts: '+e.message}}
-function change(fn){if(storageError)return;fn();persist();render()}
+function change(fn){if(storageError)return;groupUndo=null;fn();persist();render()}
 function settle(p,t){if(p.court)p.courtDone+=current(p,t);else p.benchDone+=current(p,t);p.stintStart=t}
 function move(id,to){const p=state.players.find(x=>x.id===id);if(!p||state.finished||p.court===to)return;const old=p.court,t=elapsed(),other=state.players.find(x=>x.court===to&&to!==null);if(other){if(old===null){settle(p,t);settle(other,t)}other.court=old;p.court=to}else{if((old===null)!==(to===null))settle(p,t);p.court=to}}
 function tap(id){if(state.finished)return;const p=state.players.find(x=>x.id===id);if(!p)return;if(!selected){selected=id;render();return}if(selected===id){selected=null;render();return}const first=state.players.find(x=>x.id===selected);if(!first){selected=null;render();return}if(!first.court&&!p.court){selected=id;render();return}change(()=>{if(p.court)move(first.id,p.court);else if(first.court)move(p.id,first.court);selected=null})}
@@ -83,7 +85,7 @@ function makeRow(p,t,rank){
   }
   return row;
 }
-function render(){prepareShareLink();const t=elapsed();$('clock').textContent=fmt(halfElapsed());$('halfLabel').textContent=state.finished?'MATCH AVSLUTAD':`HALVLEK ${state.half}`;$('totalTime').textContent=`Totalt ${fmt(t)} · ${state.finished?'Avslutad':state.runStarted!==null?'Pågår':'Pausad'}`;$('toggleBtn').textContent=state.runStarted!==null?'Ⅱ Pausa':'▶ Starta';$('toggleBtn').disabled=state.finished||!!storageError;$('halfBtn').textContent=state.half===1?'Halvtid':'Avsluta';$('halfBtn').disabled=state.finished||halfElapsed()===0||!!storageError;$('rosterBtn').disabled=state.runStarted!==null||!!storageError;$('storageWarning').hidden=!(storageError||repairMessage);$('storageWarning').textContent=storageError||repairMessage;
+function render(){prepareShareLink();const t=elapsed();$('clock').textContent=fmt(halfElapsed());$('halfLabel').textContent=state.finished?'MATCH AVSLUTAD':`HALVLEK ${state.half}`;$('totalTime').textContent=`Totalt ${fmt(t)} · ${state.finished?'Avslutad':state.runStarted!==null?'Pågår':'Pausad'}`;$('toggleBtn').textContent=state.runStarted!==null?'Ⅱ Pausa':'▶ Starta';$('toggleBtn').disabled=state.finished||!!storageError;$('halfBtn').textContent=state.half===1?'Halvtid':'Avsluta';$('halfBtn').disabled=state.finished||halfElapsed()===0||!!storageError;$('rosterBtn').disabled=state.runStarted!==null||!!storageError;$('groupBtn').disabled=state.finished||!!storageError;$('allOutBtn').disabled=state.finished||!!storageError;$('undoGroupBar').hidden=!groupUndo;$('storageWarning').hidden=!(storageError||repairMessage);$('storageWarning').textContent=storageError||repairMessage;
 const chosen=state.players.find(x=>x.id===selected);$('hint').textContent=chosen?`Vald: ${chosen.name}. ${chosen.court?'Tryck på en bänkspelare för byte eller en planspelare för positionsbyte.':'Tryck på spelaren som ska ut eller på en tom position.'} (Tryck samma spelare för att avbryta.)`:'Välj först en bänkspelare och sedan spelaren på planen som ska ut.';$('hint').classList.toggle('has-selection',!!chosen);
 const ranks=state.players.filter(p=>p.court&&p.court!=='MV').sort((a,b)=>current(b,t)-current(a,t)||a.name.localeCompare(b.name,'sv'));const ranking=new Map(ranks.slice(0,2).map((p,i)=>[p.id,i+1]));const court=$('court');court.replaceChildren();POS.forEach(pos=>{const p=state.players.find(p=>p.court===pos);if(p){court.append(makeRow(p,t,ranking.get(p.id)||0));return}const btn=el('button','player empty'+(chosen?' can-enter':''),`${pos} · Tom plats ${chosen?'· Tryck för att sätta in':''}`);btn.disabled=!chosen||state.finished;btn.onclick=()=>change(()=>{move(chosen.id,pos);selected=null});court.append(btn)});$('courtCount').textContent=`${state.players.filter(p=>p.court).length}/7`;const bench=state.players.filter(p=>!p.court).sort((a,b)=>a.stintStart-b.stintStart||a.name.localeCompare(b.name,'sv'));$('bench').replaceChildren(...bench.map(p=>makeRow(p,t,0)));$('benchCount').textContent=`${bench.length} spelare`;
 }
@@ -338,13 +340,103 @@ $('confirmImport').onclick=async()=>{
   $('confirmImport').disabled=true;
   try{await previewImport(source);}finally{$('confirmImport').disabled=false;}
 };
+
+// A group exchange is one atomic transaction: every affected player is settled at the SAME match clock.
+function candidateBench(){
+  return state.players.filter(p=>p.court===null).sort((a,b)=>a.stintStart-b.stintStart||a.name.localeCompare(b.name,'sv'));
+}
+function groupCourt(){return POS.filter(pos=>pos!=='MV').map(pos=>[pos,state.players.find(p=>p.court===pos)]).filter(([,p])=>!!p);}
+function proposeGroup(all){
+  const court=groupCourt(), available=candidateBench();
+  if(!available.length){alert('Det finns inga spelare på bänken att byta in.');return;}
+  if(all&&court.length!==6){alert('Byt alla utespelare kräver sex utespelare på planen. Använd Gruppbyte för ett mindre byte.');return;}
+  if(all&&available.length<6){alert(`Det behövs sex bänkspelare för ett helt byte. Nu finns ${available.length}. Använd Gruppbyte för färre spelare.`);return;}
+  groupAssignments=new Map();
+  if(all){
+    const pool=available.slice(0,6); // Longest on bench, with position preference where possible.
+    const remaining=[...pool];
+    for(const [pos] of court){
+      const index=remaining.findIndex(p=>p.preferred===pos);
+      if(index>=0)groupAssignments.set(pos,remaining.splice(index,1)[0].id);
+    }
+    for(const [pos] of court)if(!groupAssignments.has(pos))groupAssignments.set(pos,remaining.shift().id);
+  }
+  $('groupTitle').textContent=all?'Byt alla utespelare':'Gruppbyte';
+  drawGroup();$('groupDialog').showModal();
+}
+function drawGroup(){
+  const target=$('groupRows');target.replaceChildren();
+  const available=candidateBench(), court=groupCourt();
+  for(const [pos,out] of court){
+    const section=el('div','groupRow');
+    const toggle=el('label','groupCheck');
+    const check=el('input');check.type='checkbox';check.checked=groupAssignments.has(pos);
+    check.addEventListener('change',()=>{
+      if(!check.checked)groupAssignments.delete(pos);
+      else {
+        const first=available.find(p=>!Array.from(groupAssignments.values()).includes(p.id)&&p.preferred===pos)||available.find(p=>!Array.from(groupAssignments.values()).includes(p.id));
+        if(first)groupAssignments.set(pos,first.id);else check.checked=false;
+      }
+      drawGroup();
+    });
+    toggle.append(check,el('span','',`${pos} · Ut: ${out.number?'#'+out.number+' ':''}${out.name}`));section.append(toggle);
+    if(groupAssignments.has(pos)){
+      const lbl=el('label','groupIncoming');lbl.append(el('span','','In från bänken'));
+      const select=el('select');
+      available.forEach(p=>{
+        const opt=el('option','',`${p.number?'#'+p.number+' ':''}${p.name}${p.preferred===pos?' · '+pos:''}`);
+        opt.value=p.id;opt.selected=groupAssignments.get(pos)===p.id;select.append(opt);
+      });
+      select.value=groupAssignments.get(pos);
+      select.onchange=()=>{groupAssignments.set(pos,select.value);drawGroup()};
+      lbl.append(select);section.append(lbl);
+    }
+    target.append(section);
+  }
+  const ids=[...groupAssignments.values()];
+  const unique=new Set(ids).size===ids.length;
+  const validGroup=ids.length>0&&ids.length<=available.length&&unique&&ids.every(id=>available.some(p=>p.id===id));
+  $('groupStatus').textContent=!ids.length?'Markera minst en utespelare som ska bytas.':!unique?'Samma bänkspelare är vald på flera positioner. Välj olika spelare.':`${ids.length} utespelare ut och ${ids.length} in · alla byts vid samma matchtid.`;
+  $('groupStatus').classList.toggle('groupError',!unique);
+  $('commitGroup').disabled=!validGroup;
+}
+function performGroup(){
+  const assignments=[...groupAssignments.entries()];
+  const incomingIDs=assignments.map(([,id])=>id);
+  const outPositions=new Set(groupCourt().map(([pos])=>pos));
+  if(storageError||state.finished||!assignments.length||new Set(incomingIDs).size!==incomingIDs.length||
+    assignments.some(([pos,id])=>pos==='MV'||!outPositions.has(pos)||!state.players.some(p=>p.id===id&&p.court===null)))return;
+  const before=structuredClone(state), time=elapsed();
+  const outgoing=assignments.map(([pos])=>state.players.find(p=>p.court===pos));
+  const incoming=assignments.map(([,id])=>state.players.find(p=>p.id===id));
+  for(const p of [...outgoing,...incoming])settle(p,time);
+  outgoing.forEach(p=>p.court=null);
+  assignments.forEach(([pos],i)=>{incoming[i].court=pos;});
+  selected=null;
+  if(!valid(state)){state=before;alert('Bytet kunde inte registreras. Inga tider har ändrats.');render();return;}
+  // Undo restores positions and clocks as they were immediately before the group swap.
+  groupUndo={before,count:assignments.length};
+  persist();render();$('groupDialog').close();
+  $('undoGroupText').textContent=`${assignments.length} byten registrerade`;
+}
+$('groupBtn').onclick=()=>proposeGroup(false);
+$('allOutBtn').onclick=()=>proposeGroup(true);
+$('closeGroup').onclick=()=>$('groupDialog').close();
+$('commitGroup').onclick=performGroup;
+$('undoGroupBtn').onclick=()=>{
+  if(!groupUndo||storageError)return;
+  // Do not rewind match time: original runStarted / elapsedBefore continue to advance normally.
+  const backup=groupUndo.before;
+  state=structuredClone(backup);groupUndo=null;selected=null;persist();render();
+};
+
 $('rosterBtn').onclick=()=>{draft=structuredClone(state.players);drawRoster();$('rosterDialog').showModal()};$('closeRoster').onclick=()=>$('rosterDialog').close();$('addPlayer').onclick=()=>{updateDraft();draft.push({id:uid(),name:'',number:'',preferred:'M9',court:null,courtDone:0,benchDone:0,stintStart:elapsed()});drawRoster();const inputs=$('rosterDialog').querySelectorAll('.editName');const last=inputs[inputs.length-1];if(last){last.scrollIntoView({block:'center',behavior:'instant'});/* Let user tap the visible field; forcing keyboard focus during DOM redraw causes iOS viewport zoom/pan. */}};$('saveRoster').onclick=()=>{updateDraft();if(!draft.length||draft.some(p=>!p.name)){alert('Alla spelare måste ha ett namn.');return}if(elapsed()>0&&state.players.some(p=>!draft.find(d=>d.id===p.id))){alert('Efter matchstart går det inte att ta bort spelare.');return}const proposed={...state,players:structuredClone(draft)};
   if(!valid(proposed)){
     alert('Spelarlistan innehåller ett ogiltigt tidvärde. Den har inte sparats.');return;
   }
   change(()=>state.players=proposed.players);$('rosterDialog').close()};
 const versionTag=document.createElement('small');
-versionTag.textContent='Version 13 · formulärfix';versionTag.style.cssText='display:block;color:#a8c0e8;font-size:11px;margin-top:3px';
+versionTag.textContent='Version 14 · gruppbyten';versionTag.style.cssText='display:block;color:#a8c0e8;font-size:11px;margin-top:3px';
 const brand=document.querySelector('header .brand, .brand');if(brand)brand.append(versionTag);
 render();importFromLink();window.addEventListener('hashchange',importFromLink);window.addEventListener('popstate',importFromLink);window.addEventListener('pageshow',importFromLink);window.addEventListener('focus',importFromLink);// Update only text while the clock is running. Replacing rows each second
 // destroys touch targets before iOS dispatches click, requiring two taps.

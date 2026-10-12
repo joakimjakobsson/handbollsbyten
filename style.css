@@ -44,3 +44,18 @@
   #rosterDialog { padding: 12px; }
   #rosterDialog .rosterRow { grid-template-columns: minmax(0,1fr) 82px; padding: 10px; }
 }
+
+/* v14: simultaneous substitutions */
+.groupActions{display:flex;gap:9px;margin:0 15px 15px;flex-wrap:wrap}
+.groupActions button{flex:1;min-width:145px;background:#e9f2ff;border:1px solid #7ea6e9;color:#1d4a8c;font-size:14px}
+.undoBar{margin:0 15px 14px;padding:10px 12px;border:1px solid #8fc5a6;background:#eaf9f0;border-radius:12px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px}
+.undoBar[hidden]{display:none}
+.undoBar button{padding:9px 12px;color:#115537}
+#groupDialog{max-height:90dvh;overflow-y:auto;overscroll-behavior:contain}
+.groupRow{background:#f3f6fc;border-radius:12px;padding:12px;margin:9px 0;display:grid;gap:10px}
+.groupCheck{display:flex;align-items:center;gap:10px;font-weight:750;font-size:14px}
+.groupCheck input{width:22px;height:22px;flex-shrink:0}
+.groupIncoming{display:grid;gap:6px;font-size:12px;font-weight:650;color:#596a81}
+.groupIncoming select{font-size:16px;max-width:100%;width:100%;padding:11px;border-radius:10px;border:1px solid #a6b9d6;background:#fff;color:#152e50}
+.groupStatus{padding:10px 12px;background:#e9f2ff;color:#23487e;border-radius:10px;font-size:13px}
+.groupStatus.groupError{background:#fff0ef;color:#982e3b}
