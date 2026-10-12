@@ -338,13 +338,13 @@ $('confirmImport').onclick=async()=>{
   $('confirmImport').disabled=true;
   try{await previewImport(source);}finally{$('confirmImport').disabled=false;}
 };
-$('rosterBtn').onclick=()=>{draft=structuredClone(state.players);drawRoster();$('rosterDialog').showModal()};$('closeRoster').onclick=()=>$('rosterDialog').close();$('addPlayer').onclick=()=>{updateDraft();draft.push({id:uid(),name:'',number:'',preferred:'M9',court:null,courtDone:0,benchDone:0,stintStart:elapsed()});drawRoster();const inputs=document.querySelectorAll('.editName');inputs[inputs.length-1]?.focus()};$('saveRoster').onclick=()=>{updateDraft();if(!draft.length||draft.some(p=>!p.name)){alert('Alla spelare måste ha ett namn.');return}if(elapsed()>0&&state.players.some(p=>!draft.find(d=>d.id===p.id))){alert('Efter matchstart går det inte att ta bort spelare.');return}const proposed={...state,players:structuredClone(draft)};
+$('rosterBtn').onclick=()=>{draft=structuredClone(state.players);drawRoster();$('rosterDialog').showModal()};$('closeRoster').onclick=()=>$('rosterDialog').close();$('addPlayer').onclick=()=>{updateDraft();draft.push({id:uid(),name:'',number:'',preferred:'M9',court:null,courtDone:0,benchDone:0,stintStart:elapsed()});drawRoster();const inputs=$('rosterDialog').querySelectorAll('.editName');const last=inputs[inputs.length-1];if(last){last.scrollIntoView({block:'center',behavior:'instant'});/* Let user tap the visible field; forcing keyboard focus during DOM redraw causes iOS viewport zoom/pan. */}};$('saveRoster').onclick=()=>{updateDraft();if(!draft.length||draft.some(p=>!p.name)){alert('Alla spelare måste ha ett namn.');return}if(elapsed()>0&&state.players.some(p=>!draft.find(d=>d.id===p.id))){alert('Efter matchstart går det inte att ta bort spelare.');return}const proposed={...state,players:structuredClone(draft)};
   if(!valid(proposed)){
     alert('Spelarlistan innehåller ett ogiltigt tidvärde. Den har inte sparats.');return;
   }
   change(()=>state.players=proposed.players);$('rosterDialog').close()};
 const versionTag=document.createElement('small');
-versionTag.textContent='Version 12 · tidsfix 2';versionTag.style.cssText='display:block;color:#a8c0e8;font-size:11px;margin-top:3px';
+versionTag.textContent='Version 13 · formulärfix';versionTag.style.cssText='display:block;color:#a8c0e8;font-size:11px;margin-top:3px';
 const brand=document.querySelector('header .brand, .brand');if(brand)brand.append(versionTag);
 render();importFromLink();window.addEventListener('hashchange',importFromLink);window.addEventListener('popstate',importFromLink);window.addEventListener('pageshow',importFromLink);window.addEventListener('focus',importFromLink);// Update only text while the clock is running. Replacing rows each second
 // destroys touch targets before iOS dispatches click, requiring two taps.

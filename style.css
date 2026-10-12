@@ -17,3 +17,30 @@
 .player.selected .name{color:#0b3f9b}
 
 .import-preview{white-space:pre-line;overflow-wrap:anywhere;background:#e8f2ff;border:1px solid #9bbcf5;border-radius:12px;padding:12px;margin:12px 0;color:#153769;max-height:220px;overflow:auto}
+
+
+/* v13: keep iOS from auto-zooming small text fields and keep the editor on screen. */
+#rosterDialog {
+  width: min(540px, calc(100vw - 20px));
+  max-width: calc(100vw - 20px);
+  max-height: min(92dvh, calc(100dvh - 20px));
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+#rosterDialog .rosterRow { min-width: 0; }
+#rosterDialog .rosterRow label { min-width: 0; }
+#rosterDialog input, #rosterDialog select {
+  font-size: 16px; /* iOS Safari zooms when focused controls use <16px */
+  line-height: 1.35;
+  max-width: 100%;
+}
+#rosterDialog .modalActions {
+  z-index: 2;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+}
+@media (max-width: 400px) {
+  #rosterDialog { padding: 12px; }
+  #rosterDialog .rosterRow { grid-template-columns: minmax(0,1fr) 82px; padding: 10px; }
+}
