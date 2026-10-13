@@ -95,3 +95,13 @@
 .markFields label{display:grid;gap:5px;font-size:13px;font-weight:700;color:#334b6b}
 .markFields input{font-size:16px;padding:11px;border:1px solid #adbed6;border-radius:10px;width:100%}
 #markSettingsDialog .support{margin-top:14px}
+
+/* v19: choose elapsed-time reminders or the original two-player ranking. */
+.legend[hidden],#markSettingsBtn[hidden]{display:none}
+.markModeControl{display:grid;gap:5px;margin:0 15px 12px}
+.markModeControl label{font-size:12px;font-weight:700;color:#536781}
+.markModeControl select{width:100%;font-size:16px;padding:10px;border:1px solid #adbed6;border-radius:10px;background:white;color:#183250}
+.player.mark-longest{border-color:#ed7783;background:#fff0f2}
+.player.mark-second{border-color:#eeb55a;background:#fff7e9}
+.mark-longest .stintBadge{color:#a01b27}.mark-second .stintBadge{color:#8b4200}
+.player.selected{border:3px solid #0759e4;background:#dceaff}

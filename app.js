@@ -99,6 +99,35 @@ function tap(id){if(state.finished)return;const p=state.players.find(x=>x.id===i
 const el=(tag,cls='',text='')=>{const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=text;return node};
 
 const MARK_KEY='handbollsbyten-byte-granser-v1';
+const MARK_MODE_KEY='handbollsbyten-markeringslage-v1';
+let markMode='limits';
+try{if(localStorage.getItem(MARK_MODE_KEY)==='ranking')markMode='ranking';}catch{}
+function setMarkMode(next){
+  if(!['limits','ranking'].includes(next))return;
+  try{localStorage.setItem(MARK_MODE_KEY,next);}
+  catch{alert('Markeringsläget kunde inte sparas på enheten.');$('markModeSelect').value=markMode;return;}
+  markMode=next;
+  // Update styles/text in place even while paused; preserve selected touch targets.
+  renderMarkLegend();
+  const t=elapsed(),min=minimumCourtStint(t);
+  document.querySelectorAll('.player[data-player-id]').forEach(row=>{
+    const p=state.players.find(p=>p.id===row.dataset.playerId);
+    if(p)updateRowMark(row,p,t,min);
+  });
+  updateMarkSummary(t);
+}
+function rankingMark(p,t){
+  // Compare whole displayed seconds so identical displayed times share a mark.
+  // Strictly more than three minutes: first mark at 03:01.
+  const seconds=Math.floor(current(p,t));
+  if(seconds<=180)return null;
+  const levels=[...new Set(state.players.filter(x=>x.court&&x.court!=='MV')
+    .map(x=>Math.floor(current(x,t))).filter(value=>value>180))]
+    .sort((a,b)=>b-a);
+  return seconds===levels[0]?{kind:'longest',label:'● Längst'}:
+    seconds===levels[1]?{kind:'second',label:'● Näst längst'}:null;
+}
+
 const DEFAULT_MARKS={prepare:3,due:4,long:5};
 function validMarks(v){return v&&['prepare','due','long'].every(k=>Number.isFinite(v[k])&&v[k]>=0.5&&v[k]<=30)&&v.prepare<v.due&&v.due<v.long;}
 let markLimits={...DEFAULT_MARKS};
@@ -108,7 +137,9 @@ function minimumCourtStint(t){
   return stints.length?Math.min(...stints):0;
 }
 function playerMark(p,t,minStint=minimumCourtStint(t)){
-  if(!p.court||p.court==='MV'||state.finished)return null;
+  if(!p.court||p.court==='MV')return null;
+  if(markMode==='ranking')return rankingMark(p,t);
+  if(state.finished)return null;
   const seconds=current(p,t);
   if(seconds>=markLimits.long*60)return {kind:'long',label:'Långt byte'};
   if(seconds>=markLimits.due*60)return {kind:'due',label:'Bytesdags'};
@@ -118,11 +149,12 @@ function playerMark(p,t,minStint=minimumCourtStint(t)){
 }
 function updateRowMark(row,p,t,minStint){
   const mark=playerMark(p,t,minStint);
-  for(const kind of ['relative','prepare','due','long'])row.classList.toggle('mark-'+kind,mark?.kind===kind);
+  for(const kind of ['relative','prepare','due','long','longest','second'])row.classList.toggle('mark-'+kind,mark?.kind===kind);
   const badge=row.querySelector('.stintBadge');
   if(badge){badge.hidden=!mark;badge.textContent=mark?mark.label:'';}
 }
 function updateMarkSummary(t){
+  if(markMode==='ranking'){$('markSummary').hidden=true;$('markSummary').textContent='';return;}
   const out=state.players.filter(p=>p.court&&p.court!=='MV');
   const due=state.finished?0:out.filter(p=>current(p,t)>=markLimits.due*60).length;
   const long=state.finished?0:out.filter(p=>current(p,t)>=markLimits.long*60).length;
@@ -131,6 +163,10 @@ function updateMarkSummary(t){
   $('markSummary').classList.toggle('has-long',long>0);
 }
 function renderMarkLegend(){
+  $('limitsLegend').hidden=markMode!=='limits';
+  $('rankingLegend').hidden=markMode!=='ranking';
+  $('markSettingsBtn').hidden=markMode!=='limits';
+  $('markModeSelect').value=markMode;
   $('prepareLegend').textContent='Förbered '+markLimits.prepare+' min';
   $('dueLegend').textContent='Bytesdags '+markLimits.due+' min';
   $('longLegend').textContent='Långt byte '+markLimits.long+' min';
@@ -552,11 +588,12 @@ $('rosterBtn').onclick=()=>{draft=structuredClone(state.players);drawRoster();$(
   }
   change(()=>{state.players=proposed.players;state.benchQueue=proposed.benchQueue;});$('rosterDialog').close()};
 const versionTag=document.createElement('small');
-versionTag.textContent='Version 18 · bytesmarkeringar';versionTag.style.cssText='display:block;color:#a8c0e8;font-size:11px;margin-top:3px';
+versionTag.textContent='Version 20 · delade tidsmarkeringar';versionTag.style.cssText='display:block;color:#a8c0e8;font-size:11px;margin-top:3px';
 const brand=document.querySelector('header .brand, .brand');if(brand)brand.append(versionTag);
 $('closeBenchMenu').onclick=()=>$('benchMenuDialog').close();
 $('sendBenchLast').onclick=()=>{sendBenchLast(benchMenuPlayer);$('benchMenuDialog').close();};
 $('resetBenchOrder').onclick=()=>change(()=>{state.benchQueue=null;selected=null;});
+$('markModeSelect').onchange=()=>setMarkMode($('markModeSelect').value);
 $('markSettingsBtn').onclick=()=>{
   for(const key of ['prepare','due','long'])$('limit-'+key).value=markLimits[key];
   $('markSettingsError').hidden=true;$('markSettingsDialog').showModal();
