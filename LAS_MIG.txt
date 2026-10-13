@@ -1,4 +1,4 @@
-Handbollsbyten – version 16: manuell bänkkö
+Handbollsbyten – version 17: jämnare speltid
 
 Tryck på ⋯ bredvid en bänkspelare, eller håll inne på spelaren.
 Välj ”Flytta sist i kön”. Bänktiden behålls.
@@ -21,9 +21,21 @@ Delning av lag delar spelarlistan, inte den manuella kön.
 Uppdatering:
 Packa upp zipfilen och ersätt den tidigare webbappens filer.
 Använd samma webbadress för att behålla den lokalt sparade matchen.
-Kontrollera att ”Version 16 · manuell bänkkö” visas efter uppdatering.
+Kontrollera att ”Version 17 · jämnare speltid” visas efter uppdatering.
 
 Verifiering:
 Köordning, gruppbyte, ångra, tider, lokal sparning, enskilt byte,
 återställning och tillägg av spelare är kontrollerade i logiktester.
 Gränssnittet behöver provköras på iPhone före match.
+
+Nytt i version 17:
+När flera spelare går av vid samma matchtid sorteras de inbördes
+efter minst total speltid först. Namn avgör först om både bänktid
+och total speltid är lika. Detta sprider extra bänkperioder när
+det finns fler än sex avbytare.
+
+Spelare som redan väntar i en manuell kö behåller sin plats.
+Manuella flyttar sist gäller fortfarande.
+Tryck ”Återställ efter bänktid” för att räkna om en befintlig manuell
+kö enligt de nya reglerna direkt. Annars gäller den nya regeln
+för spelare som går av vid kommande byten.

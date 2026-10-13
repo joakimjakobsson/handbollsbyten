@@ -41,9 +41,10 @@ try{
   }
 }catch(e){state=initial();storageError=`Det gick inte att läsa den sparade matchen (${e.message}). Ingenting skrivs över förrän du återställer lagringen.`;}
 
-// Missing/null queue preserves v15 automatic bench-time sorting.
+// Bench time first; simultaneous arrivals use least total court time first.
+// For benched players courtDone is their complete court total.
 function benchTimeOrder(m=state){
-  return m.players.filter(p=>p.court===null).sort((a,b)=>a.stintStart-b.stintStart||a.name.localeCompare(b.name,'sv'));
+  return m.players.filter(p=>p.court===null).sort((a,b)=>a.stintStart-b.stintStart||a.courtDone-b.courtDone||a.name.localeCompare(b.name,'sv'));
 }
 function validBenchQueue(m){
   if(!m||m.benchQueue==null)return true;
@@ -130,7 +131,7 @@ const ranks=state.players.filter(p=>p.court&&p.court!=='MV').sort((a,b)=>current
   menu.disabled=state.finished||!!storageError;menu.onclick=()=>openBenchMenu(p.id);
   wrap.append(row,menu);return wrap;
 }));
-$('benchOrderHint').textContent=state.benchQueue==null?'Automatisk ordning efter längst bänktid. Tryck ⋯ eller håll inne för att flytta en spelare sist.':'Manuell kö · nästa byte följer ordningen nedan. Bänktiderna räknas som vanligt.';
+$('benchOrderHint').textContent=state.benchQueue==null?'Längst bänktid först. Vid lika bänktid går minst total speltid först. Tryck ⋯ eller håll inne för att flytta en spelare sist.':'Manuell kö · nästa byte följer ordningen nedan. Bänktiderna räknas som vanligt.';
 $('resetBenchOrder').disabled=state.benchQueue==null||state.finished||!!storageError;$('benchCount').textContent=`${bench.length} spelare`;
 }
 $('toggleBtn').onclick=()=>change(()=>{if(state.runStarted!==null){state.elapsedBefore=elapsed();state.runStarted=null}else state.runStarted=Date.now()});
@@ -511,7 +512,7 @@ $('rosterBtn').onclick=()=>{draft=structuredClone(state.players);drawRoster();$(
   }
   change(()=>{state.players=proposed.players;state.benchQueue=proposed.benchQueue;});$('rosterDialog').close()};
 const versionTag=document.createElement('small');
-versionTag.textContent='Version 16 · manuell bänkkö';versionTag.style.cssText='display:block;color:#a8c0e8;font-size:11px;margin-top:3px';
+versionTag.textContent='Version 17 · jämnare speltid';versionTag.style.cssText='display:block;color:#a8c0e8;font-size:11px;margin-top:3px';
 const brand=document.querySelector('header .brand, .brand');if(brand)brand.append(versionTag);
 $('closeBenchMenu').onclick=()=>$('benchMenuDialog').close();
 $('sendBenchLast').onclick=()=>{sendBenchLast(benchMenuPlayer);$('benchMenuDialog').close();};
