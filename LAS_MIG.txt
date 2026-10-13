@@ -1,4 +1,4 @@
-Handbollsbyten – version 17: jämnare speltid
+Handbollsbyten – version 18: bytesmarkeringar
 
 Tryck på ⋯ bredvid en bänkspelare, eller håll inne på spelaren.
 Välj ”Flytta sist i kön”. Bänktiden behålls.
@@ -21,7 +21,7 @@ Delning av lag delar spelarlistan, inte den manuella kön.
 Uppdatering:
 Packa upp zipfilen och ersätt den tidigare webbappens filer.
 Använd samma webbadress för att behålla den lokalt sparade matchen.
-Kontrollera att ”Version 17 · jämnare speltid” visas efter uppdatering.
+Kontrollera att ”Version 18 · bytesmarkeringar” visas efter uppdatering.
 
 Verifiering:
 Köordning, gruppbyte, ångra, tider, lokal sparning, enskilt byte,
@@ -39,3 +39,17 @@ Manuella flyttar sist gäller fortfarande.
 Tryck ”Återställ efter bänktid” för att räkna om en befintlig manuell
 kö enligt de nya reglerna direkt. Annars gäller den nya regeln
 för spelare som går av vid kommande byten.
+
+Nytt i version 18:
+Gul från 3 minuter: Förbered byte.
+Orange från 4 minuter: Bytesdags.
+Röd från 5 minuter: Långt byte.
+Blå: minst en minut längre än utespelaren med kortast pågående byte,
+så länge ingen av tidsgränserna har passerats.
+Alla berörda spelare markeras; målvakten och bänken undantas.
+Ingen markering vid matchstart. Vid lika tider över en gräns får
+alla utespelare samma markering. Markeringar försvinner vid avslutad match.
+Bytesgränser ändras via knappen Bytesgränser och sparas på enheten.
+Ny match behåller gränserna. Pausad klocka fryser även påminnelserna.
+Gränserna är påminnelser, inte automatiska byten.
+Testa på iPhone före riktig match.

@@ -97,15 +97,54 @@ function settle(p,t){if(p.court)p.courtDone+=current(p,t);else p.benchDone+=curr
 function move(id,to){const p=state.players.find(x=>x.id===id);if(!p||state.finished||p.court===to)return;const old=p.court,t=elapsed(),other=state.players.find(x=>x.court===to&&to!==null);if(other){if(old===null){settle(p,t);settle(other,t)}other.court=old;p.court=to}else{if((old===null)!==(to===null))settle(p,t);p.court=to}}
 function tap(id){if(state.finished)return;const p=state.players.find(x=>x.id===id);if(!p)return;if(!selected){selected=id;render();return}if(selected===id){selected=null;render();return}const first=state.players.find(x=>x.id===selected);if(!first){selected=null;render();return}if(!first.court&&!p.court){selected=id;render();return}change(()=>{if(p.court)move(first.id,p.court);else if(first.court)move(p.id,first.court);selected=null})}
 const el=(tag,cls='',text='')=>{const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=text;return node};
-function makeRow(p,t,rank){
+
+const MARK_KEY='handbollsbyten-byte-granser-v1';
+const DEFAULT_MARKS={prepare:3,due:4,long:5};
+function validMarks(v){return v&&['prepare','due','long'].every(k=>Number.isFinite(v[k])&&v[k]>=0.5&&v[k]<=30)&&v.prepare<v.due&&v.due<v.long;}
+let markLimits={...DEFAULT_MARKS};
+try{const v=JSON.parse(localStorage.getItem(MARK_KEY));if(validMarks(v))markLimits=v;}catch{}
+function minimumCourtStint(t){
+  const stints=state.players.filter(p=>p.court&&p.court!=='MV').map(p=>current(p,t));
+  return stints.length?Math.min(...stints):0;
+}
+function playerMark(p,t,minStint=minimumCourtStint(t)){
+  if(!p.court||p.court==='MV'||state.finished)return null;
+  const seconds=current(p,t);
+  if(seconds>=markLimits.long*60)return {kind:'long',label:'Långt byte'};
+  if(seconds>=markLimits.due*60)return {kind:'due',label:'Bytesdags'};
+  if(seconds>=markLimits.prepare*60)return {kind:'prepare',label:'Förbered byte'};
+  if(seconds>=60&&seconds-minStint>=60)return {kind:'relative',label:'Längre byte'};
+  return null;
+}
+function updateRowMark(row,p,t,minStint){
+  const mark=playerMark(p,t,minStint);
+  for(const kind of ['relative','prepare','due','long'])row.classList.toggle('mark-'+kind,mark?.kind===kind);
+  const badge=row.querySelector('.stintBadge');
+  if(badge){badge.hidden=!mark;badge.textContent=mark?mark.label:'';}
+}
+function updateMarkSummary(t){
+  const out=state.players.filter(p=>p.court&&p.court!=='MV');
+  const due=state.finished?0:out.filter(p=>current(p,t)>=markLimits.due*60).length;
+  const long=state.finished?0:out.filter(p=>current(p,t)>=markLimits.long*60).length;
+  $('markSummary').hidden=!due;
+  $('markSummary').textContent=due?due+' spelare har nått bytesdags'+(long?' · '+long+' har långa byten':''):'';
+  $('markSummary').classList.toggle('has-long',long>0);
+}
+function renderMarkLegend(){
+  $('prepareLegend').textContent='Förbered '+markLimits.prepare+' min';
+  $('dueLegend').textContent='Bytesdags '+markLimits.due+' min';
+  $('longLegend').textContent='Långt byte '+markLimits.long+' min';
+}
+
+function makeRow(p,t){
   const isSelected=selected===p.id;
-  const row=el('button','player'+(isSelected?' selected':'')+(rank===1?' rank1':rank===2?' rank2':''));
+  const row=el('button','player'+(isSelected?' selected':''));
   row.type='button';row.dataset.playerId=p.id;row.setAttribute('aria-pressed',String(isSelected));
   const pos=el('span','position',p.court||p.preferred);row.append(pos);
   if(p.number)row.append(el('span','jersey','#'+p.number));
   const details=el('span','details');details.append(el('div','name',p.name));
   const meta=el('div','subtext',p.court?'På plan':'På bänk');
-  if(rank)meta.append(el('span','rankBadge',rank===1?'● Längst':'● Näst längst'));
+  const badge=el('span','stintBadge');badge.hidden=true;meta.append(badge);
   if(isSelected)meta.append(el('span','selectedBadge','✓ VALD'));
   details.append(meta);row.append(details);
   const num=el('span','numbers');num.append(el('b','playerCurrent',fmt(current(p,t))));
@@ -119,13 +158,14 @@ function makeRow(p,t,rank){
     row.addEventListener('touchstart',()=>{longPressed=false;clearTimeout(holdTimer);holdTimer=setTimeout(()=>{longPressed=true;holdTimer=null;benchPlayer()},850)},{passive:true});
     ['touchend','touchcancel','touchmove'].forEach(ev=>row.addEventListener(ev,()=>{clearTimeout(holdTimer);holdTimer=null},{passive:true}));
   }
+  updateRowMark(row,p,t,minimumCourtStint(t));
   return row;
 }
-function render(){prepareShareLink();const t=elapsed();$('clock').textContent=fmt(halfElapsed());$('halfLabel').textContent=state.finished?'MATCH AVSLUTAD':`HALVLEK ${state.half}`;$('totalTime').textContent=`Totalt ${fmt(t)} · ${state.finished?'Avslutad':state.runStarted!==null?'Pågår':'Pausad'}`;$('toggleBtn').textContent=state.runStarted!==null?'Ⅱ Pausa':'▶ Starta';$('toggleBtn').disabled=state.finished||!!storageError;$('halfBtn').textContent=state.half===1?'Halvtid':'Avsluta';$('halfBtn').disabled=state.finished||halfElapsed()===0||!!storageError;$('rosterBtn').disabled=state.runStarted!==null||!!storageError;$('groupBtn').disabled=state.finished||!!storageError;$('allOutBtn').disabled=state.finished||!!storageError;$('undoGroupBar').hidden=!groupUndo;$('storageWarning').hidden=!(storageError||repairMessage);$('storageWarning').textContent=storageError||repairMessage;
+function render(){prepareShareLink();const t=elapsed();renderMarkLegend();updateMarkSummary(t);$('clock').textContent=fmt(halfElapsed());$('halfLabel').textContent=state.finished?'MATCH AVSLUTAD':`HALVLEK ${state.half}`;$('totalTime').textContent=`Totalt ${fmt(t)} · ${state.finished?'Avslutad':state.runStarted!==null?'Pågår':'Pausad'}`;$('toggleBtn').textContent=state.runStarted!==null?'Ⅱ Pausa':'▶ Starta';$('toggleBtn').disabled=state.finished||!!storageError;$('halfBtn').textContent=state.half===1?'Halvtid':'Avsluta';$('halfBtn').disabled=state.finished||halfElapsed()===0||!!storageError;$('rosterBtn').disabled=state.runStarted!==null||!!storageError;$('groupBtn').disabled=state.finished||!!storageError;$('allOutBtn').disabled=state.finished||!!storageError;$('undoGroupBar').hidden=!groupUndo;$('storageWarning').hidden=!(storageError||repairMessage);$('storageWarning').textContent=storageError||repairMessage;
 const chosen=state.players.find(x=>x.id===selected);$('hint').textContent=chosen?`Vald: ${chosen.name}. ${chosen.court?'Tryck på en bänkspelare för byte eller en planspelare för positionsbyte.':'Tryck på spelaren som ska ut eller på en tom position.'} (Tryck samma spelare för att avbryta.)`:'Välj först en bänkspelare och sedan spelaren på planen som ska ut.';$('hint').classList.toggle('has-selection',!!chosen);
-const ranks=state.players.filter(p=>p.court&&p.court!=='MV').sort((a,b)=>current(b,t)-current(a,t)||a.name.localeCompare(b.name,'sv'));const ranking=new Map(ranks.slice(0,2).map((p,i)=>[p.id,i+1]));const court=$('court');court.replaceChildren();POS.forEach(pos=>{const p=state.players.find(p=>p.court===pos);if(p){court.append(makeRow(p,t,ranking.get(p.id)||0));return}const btn=el('button','player empty'+(chosen?' can-enter':''),`${pos} · Tom plats ${chosen?'· Tryck för att sätta in':''}`);btn.disabled=!chosen||state.finished;btn.onclick=()=>change(()=>{move(chosen.id,pos);selected=null});court.append(btn)});$('courtCount').textContent=`${state.players.filter(p=>p.court).length}/7`;const bench=candidateBench();$('bench').replaceChildren(...bench.map((p,i)=>{
+const court=$('court');court.replaceChildren();POS.forEach(pos=>{const p=state.players.find(p=>p.court===pos);if(p){court.append(makeRow(p,t));return}const btn=el('button','player empty'+(chosen?' can-enter':''),`${pos} · Tom plats ${chosen?'· Tryck för att sätta in':''}`);btn.disabled=!chosen||state.finished;btn.onclick=()=>change(()=>{move(chosen.id,pos);selected=null});court.append(btn)});$('courtCount').textContent=`${state.players.filter(p=>p.court).length}/7`;const bench=candidateBench();$('bench').replaceChildren(...bench.map((p,i)=>{
   const wrap=el('div','benchPlayer');
-  const row=makeRow(p,t,0);row.querySelector('.subtext').prepend(document.createTextNode((i+1)+'. i kön · '));
+  const row=makeRow(p,t);row.querySelector('.subtext').prepend(document.createTextNode((i+1)+'. i kön · '));
   const menu=el('button','benchMenuButton','⋯');menu.type='button';
   menu.setAttribute('aria-label','Ändra köplats för '+p.name);
   menu.disabled=state.finished||!!storageError;menu.onclick=()=>openBenchMenu(p.id);
@@ -512,21 +552,39 @@ $('rosterBtn').onclick=()=>{draft=structuredClone(state.players);drawRoster();$(
   }
   change(()=>{state.players=proposed.players;state.benchQueue=proposed.benchQueue;});$('rosterDialog').close()};
 const versionTag=document.createElement('small');
-versionTag.textContent='Version 17 · jämnare speltid';versionTag.style.cssText='display:block;color:#a8c0e8;font-size:11px;margin-top:3px';
+versionTag.textContent='Version 18 · bytesmarkeringar';versionTag.style.cssText='display:block;color:#a8c0e8;font-size:11px;margin-top:3px';
 const brand=document.querySelector('header .brand, .brand');if(brand)brand.append(versionTag);
 $('closeBenchMenu').onclick=()=>$('benchMenuDialog').close();
 $('sendBenchLast').onclick=()=>{sendBenchLast(benchMenuPlayer);$('benchMenuDialog').close();};
 $('resetBenchOrder').onclick=()=>change(()=>{state.benchQueue=null;selected=null;});
+$('markSettingsBtn').onclick=()=>{
+  for(const key of ['prepare','due','long'])$('limit-'+key).value=markLimits[key];
+  $('markSettingsError').hidden=true;$('markSettingsDialog').showModal();
+};
+$('closeMarkSettings').onclick=()=>$('markSettingsDialog').close();
+$('defaultMarkSettings').onclick=()=>{for(const key of ['prepare','due','long'])$('limit-'+key).value=DEFAULT_MARKS[key];};
+$('saveMarkSettings').onclick=()=>{
+  const next=Object.fromEntries(['prepare','due','long'].map(k=>[k,Number($('limit-'+k).value)]));
+  if(!validMarks(next)){
+    $('markSettingsError').textContent='Ange stigande gränser mellan 0,5 och 30 minuter: förbered < bytesdags < långt byte.';
+    $('markSettingsError').hidden=false;return;
+  }
+  try{localStorage.setItem(MARK_KEY,JSON.stringify(next));}
+  catch{ $('markSettingsError').textContent='Gränserna kunde inte sparas på enheten. Prova igen.';$('markSettingsError').hidden=false;return; }
+  markLimits=next;render();$('markSettingsDialog').close();
+};
 render();importFromLink();window.addEventListener('hashchange',importFromLink);window.addEventListener('popstate',importFromLink);window.addEventListener('pageshow',importFromLink);window.addEventListener('focus',importFromLink);// Update only text while the clock is running. Replacing rows each second
 // destroys touch targets before iOS dispatches click, requiring two taps.
 function refreshClockText(){
   if(state.runStarted===null)return;
-  const t=elapsed();
+  const t=elapsed(), minStint=minimumCourtStint(t);
+  updateMarkSummary(t);
   $('clock').textContent=fmt(halfElapsed());
   $('totalTime').textContent=`Totalt ${fmt(t)} · Pågår`;
   document.querySelectorAll('.player[data-player-id]').forEach(row=>{
     const p=state.players.find(x=>x.id===row.dataset.playerId);
     if(!p)return;
+    updateRowMark(row,p,t,minStint);
     const time=row.querySelector('.playerCurrent');
     const totals=row.querySelector('.playerTotals');
     if(time)time.textContent=fmt(current(p,t));
