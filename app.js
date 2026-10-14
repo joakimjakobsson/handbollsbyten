@@ -84,12 +84,14 @@ function cancelBenchDrag(){
   const drag=benchDrag;if(!drag)return;
   benchDrag=null;
   if(drag.frame)cancelAnimationFrame(drag.frame);
+  if(drag.holdTimer!=null)clearTimeout(drag.holdTimer);
+  drag.handle.classList.remove('dragPending');
   drag.ghost?.remove();
   drag.row.classList.remove('dragSource');
   for(const row of $('bench').querySelectorAll('.benchPlayer'))row.classList.remove('dropBefore','dropAfter');
   document.body.classList.remove('benchDragging');
   drag.handle.setAttribute('aria-pressed','false');
-  if(drag.handle.hasPointerCapture(drag.pointerId))drag.handle.releasePointerCapture(drag.pointerId);
+  if(!drag.touch&&drag.handle.hasPointerCapture(drag.pointerId))drag.handle.releasePointerCapture(drag.pointerId);
 }
 function showBenchDrop(){
   const drag=benchDrag;if(!drag?.active)return;
@@ -111,43 +113,81 @@ function scrollBenchDrag(stamp){
   if(speed){window.scrollBy(0,speed*dt/1000);showBenchDrop();}
   drag.frame=requestAnimationFrame(scrollBenchDrag);
 }
+
+function beginBenchHold(handle,row,id,x,y,pointerId,touch){
+  if(state.finished||storageError||candidateBench().length<2)return;
+  cancelBenchDrag();
+  const rect=row.getBoundingClientRect();
+  const drag={id,row,handle,pointerId,touch,x,y,startX:x,startY:y,offsetY:y-rect.top,
+    rect,active:false,frame:null,holdTimer:null};
+  benchDrag=drag;handle.classList.add('dragPending');
+  drag.holdTimer=setTimeout(()=>{
+    if(benchDrag!==drag)return;
+    drag.holdTimer=null;drag.active=true;
+    handle.classList.remove('dragPending');handle.setAttribute('aria-pressed','true');
+    row.classList.add('dragSource');
+    const ghost=row.cloneNode(true);ghost.classList.add('benchDragGhost');ghost.setAttribute('aria-hidden','true');
+    ghost.querySelectorAll('button').forEach(button=>{button.disabled=true;button.tabIndex=-1;});
+    ghost.style.width=rect.width+'px';ghost.style.left=rect.left+'px';
+    document.body.append(ghost);drag.ghost=ghost;document.body.classList.add('benchDragging');
+    showBenchDrop();drag.frame=requestAnimationFrame(scrollBenchDrag);
+  },500);
+  if(!touch)try{handle.setPointerCapture(pointerId);}catch{cancelBenchDrag();}
+}
+function moveBenchHold(x,y){
+  const drag=benchDrag;if(!drag)return;
+  drag.x=x;drag.y=y;
+  // A swipe before activation remains a native scroll gesture.
+  if(!drag.active&&Math.hypot(x-drag.startX,y-drag.startY)>8){cancelBenchDrag();return;}
+  showBenchDrop();
+}
+function finishBenchHold(x,y){
+  const drag=benchDrag;if(!drag)return;
+  drag.x=x;drag.y=y;showBenchDrop();
+  const rect=$('bench').getBoundingClientRect();
+  const inside=x>=rect.left-30&&x<=rect.right+30&&y>=rect.top-30&&y<=rect.bottom+30;
+  const {id,active,toIndex}=drag;cancelBenchDrag();
+  if(active){if(inside)moveBenchPlayer(id,toIndex);}
+  else openBenchMenu(id);
+}
 function attachBenchDrag(handle,row,id){
+  // Native scrolling stays enabled until the hold activates. Non-passive
+  // touchmove then prevents scrolling during an intentional iPhone drag.
+  handle.addEventListener('touchstart',e=>{
+    if(e.touches.length!==1){cancelBenchDrag();return;}
+    const t=e.touches[0];beginBenchHold(handle,row,id,t.clientX,t.clientY,t.identifier,true);
+  },{passive:true});
+  handle.addEventListener('touchmove',e=>{
+    const drag=benchDrag;if(!drag?.touch)return;
+    if(e.touches.length!==1){cancelBenchDrag();return;}
+    const t=[...e.touches].find(t=>t.identifier===drag.pointerId);if(!t)return;
+    if(drag.active)e.preventDefault();
+    moveBenchHold(t.clientX,t.clientY);
+  },{passive:false});
+  handle.addEventListener('touchend',e=>{
+    const drag=benchDrag;if(!drag?.touch)return;
+    const t=[...e.changedTouches].find(t=>t.identifier===drag.pointerId);if(!t)return;
+    if(drag.active)e.preventDefault();
+    finishBenchHold(t.clientX,t.clientY);
+  },{passive:false});
+  handle.addEventListener('touchcancel',()=>{if(benchDrag?.touch)cancelBenchDrag();},{passive:true});
   handle.addEventListener('pointerdown',e=>{
-    if(e.button!==0||!e.isPrimary||state.finished||storageError||candidateBench().length<2)return;
-    cancelBenchDrag();e.preventDefault();
-    const rect=row.getBoundingClientRect();
-    benchDrag={id,row,handle,pointerId:e.pointerId,x:e.clientX,y:e.clientY,startX:e.clientX,startY:e.clientY,
-      offsetY:e.clientY-rect.top,rect,active:false,frame:null};
-    handle.setAttribute('aria-pressed','true');
-    try{handle.setPointerCapture(e.pointerId);}catch{cancelBenchDrag();}
+    if(e.pointerType==='touch'||e.button!==0||!e.isPrimary)return;
+    e.preventDefault();beginBenchHold(handle,row,id,e.clientX,e.clientY,e.pointerId,false);
   });
   handle.addEventListener('pointermove',e=>{
-    const drag=benchDrag;if(!drag||e.pointerId!==drag.pointerId)return;
-    e.preventDefault();drag.x=e.clientX;drag.y=e.clientY;
-    if(!drag.active&&Math.hypot(drag.x-drag.startX,drag.y-drag.startY)>=7){
-      drag.active=true;drag.row.classList.add('dragSource');
-      const ghost=row.cloneNode(true);ghost.classList.add('benchDragGhost');ghost.setAttribute('aria-hidden','true');
-      ghost.querySelectorAll('button').forEach(button=>{button.disabled=true;button.tabIndex=-1;});
-      ghost.style.width=drag.rect.width+'px';ghost.style.left=drag.rect.left+'px';
-      document.body.append(ghost);drag.ghost=ghost;document.body.classList.add('benchDragging');
-      drag.frame=requestAnimationFrame(scrollBenchDrag);
-    }
-    showBenchDrop();
+    const drag=benchDrag;if(!drag||drag.touch||e.pointerId!==drag.pointerId)return;
+    e.preventDefault();moveBenchHold(e.clientX,e.clientY);
   });
   handle.addEventListener('pointerup',e=>{
-    const drag=benchDrag;if(!drag||e.pointerId!==drag.pointerId)return;
-    e.preventDefault();drag.x=e.clientX;drag.y=e.clientY;showBenchDrop();
-    const rect=$('bench').getBoundingClientRect();
-    const inside=drag.x>=rect.left-30&&drag.x<=rect.right+30&&drag.y>=rect.top-30&&drag.y<=rect.bottom+30;
-    const active=drag.active,to=drag.toIndex;
-    cancelBenchDrag();
-    if(active){if(inside)moveBenchPlayer(id,to);}
-    else openBenchMenu(id);
+    const drag=benchDrag;if(!drag||drag.touch||e.pointerId!==drag.pointerId)return;
+    e.preventDefault();finishBenchHold(e.clientX,e.clientY);
   });
   for(const event of ['pointercancel','lostpointercapture'])handle.addEventListener(event,e=>{
-    if(benchDrag?.pointerId===e.pointerId)cancelBenchDrag();
+    if(benchDrag&&!benchDrag.touch&&benchDrag.pointerId===e.pointerId)cancelBenchDrag();
   });
-  // Enter/Space opens direct placement; mouse/touch is handled by pointerup.
+  handle.addEventListener('contextmenu',e=>e.preventDefault());
+  // Enter/Space opens direct placement; touch and mouse use their release event.
   handle.onclick=e=>{if(e.detail===0&&!benchDrag)openBenchMenu(id);};
 }
 
@@ -294,13 +334,13 @@ const court=$('court');court.replaceChildren();POS.forEach(pos=>{const p=state.p
   const wrap=el('div','benchPlayer');wrap.dataset.benchId=p.id;
   const row=makeRow(p,t);row.querySelector('.subtext').prepend(document.createTextNode((i+1)+'. i kön · '));
   const handle=el('button','benchDragHandle','⠿');handle.type='button';
-  handle.setAttribute('aria-label','Dra '+p.name+' till en annan plats på bänken. Tryck för att välja plats.');
+  handle.setAttribute('aria-label','Håll i en halv sekund och dra '+p.name+' till en annan plats på bänken. Tryck för att välja plats.');
   handle.setAttribute('aria-pressed','false');
   handle.disabled=state.finished||!!storageError||bench.length<2;
   attachBenchDrag(handle,wrap,p.id);
   wrap.append(row,handle);return wrap;
 }));
-$('benchOrderHint').textContent=state.benchQueue==null?'Längst bänktid först. Vid lika bänktid går minst total speltid först. Dra i ⠿ för att ändra ordningen. Tryck på handtaget eller håll inne på spelaren för att välja plats.':'Manuell kö · nästa byte följer ordningen nedan. Dra i ⠿ eller tryck på handtaget för att välja plats. Bänktiderna räknas som vanligt.';
+$('benchOrderHint').textContent=state.benchQueue==null?'Längst bänktid först. Vid lika bänktid går minst total speltid först. Håll ⠿ stilla i en halv sekund, dra sedan för att ändra ordningen. Tryck på handtaget eller håll inne på spelaren för att välja plats.':'Manuell kö · nästa byte följer ordningen nedan. Håll ⠿ i en halv sekund och dra. Tryck på handtaget för att välja plats. Bänktiderna räknas som vanligt.';
 $('resetBenchOrder').disabled=state.benchQueue==null||state.finished||!!storageError;$('benchCount').textContent=`${bench.length} spelare`;
 }
 $('toggleBtn').onclick=()=>change(()=>{if(state.runStarted!==null){state.elapsedBefore=elapsed();state.runStarted=null}else state.runStarted=Date.now()});
@@ -681,7 +721,7 @@ $('rosterBtn').onclick=()=>{draft=structuredClone(state.players);drawRoster();$(
   }
   change(()=>{state.players=proposed.players;state.benchQueue=proposed.benchQueue;});$('rosterDialog').close()};
 const versionTag=document.createElement('small');
-versionTag.textContent='Version 23 · dra och släpp på bänken';versionTag.style.cssText='display:block;color:#a8c0e8;font-size:11px;margin-top:3px';
+versionTag.textContent='Version 24 · långtryck för dragning';versionTag.style.cssText='display:block;color:#a8c0e8;font-size:11px;margin-top:3px';
 const brand=document.querySelector('header .brand, .brand');if(brand)brand.append(versionTag);
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&benchDrag){e.preventDefault();cancelBenchDrag();}});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible')cancelBenchDrag();});

@@ -112,7 +112,7 @@
 
 /* v23: pointer-based dragging works with touch and mouse. Scroll normally on the player card. */
 .benchPlayer{position:relative}
-.benchDragHandle{flex:0 0 44px;min-height:60px;padding:5px;background:#e9f2ff;color:#1c4684;font-size:28px;border:1px solid #c9d5e5;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;cursor:grab}
+.benchDragHandle{flex:0 0 44px;min-height:60px;padding:5px;background:#e9f2ff;color:#1c4684;font-size:28px;border:1px solid #c9d5e5;touch-action:pan-y;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;cursor:grab}
 .benchDragHandle:active{cursor:grabbing}
 .benchPlayer.dragSource{opacity:.3}
 .benchPlayer.dropBefore::before,.benchPlayer.dropAfter::after{content:'';position:absolute;left:0;right:0;height:4px;background:#0759e4;border-radius:4px;z-index:2}
@@ -120,3 +120,8 @@
 .benchDragGhost{position:fixed;z-index:1000;pointer-events:none;opacity:.94;box-shadow:0 10px 30px #102a5366;background:white;border-radius:13px;transform:scale(1.02)}
 .benchDragGhost.dragSource{opacity:.94}
 .benchDragging{user-select:none;-webkit-user-select:none;cursor:grabbing}
+
+/* v24: a clear right-hand scrolling lane and hold-to-drag feedback. */
+#bench{padding-right:24px}
+.benchDragHandle.dragPending{background:#d7e7ff;border-color:#6798e3}
+.benchDragHandle[aria-pressed="true"]{background:#0759e4;color:white;border-color:#0759e4}

@@ -1,4 +1,4 @@
-Handbollsbyten – version 23
+Handbollsbyten – version 24
 
 Välj mellan Bytesgränser och Längst / näst längst via
 ”Markeringar på planen”. Valet sparas på enheten.
@@ -21,10 +21,13 @@ Markeringar uppdateras under pågående match utan att tryckytor
 byggs om. Pausad klocka fryser tiderna.
 
 Packa upp och ersätt den tidigare webbappens filer på samma adress.
-Kontrollera att Version 23 visas. Testa på iPhone före match.
+Kontrollera att Version 24 visas. Testa på iPhone före match.
 
-Nytt i version 23 – dra och släpp på bänken:
-- Dra i handtaget ⠿ bredvid spelaren till en annan plats.
+Nytt i version 24 – dra och släpp på bänken:
+- Håll handtaget ⠿ stilla i cirka 0,5 sekunder. När spelaren lyfts
+  visuellt kan du dra henne till en annan plats.
+- Svep före aktiveringen scrollar sidan och avbryter flytten.
+- En fri marginal till höger om handtagen ger extra plats för scrollning.
 - En blå linje visar var spelaren placeras när du släpper.
 - Listan rullar när du drar nära skärmens över- eller underkant.
 - Släpp utanför bänklistan för att avbryta flytten.
