@@ -721,7 +721,7 @@ $('rosterBtn').onclick=()=>{draft=structuredClone(state.players);drawRoster();$(
   }
   change(()=>{state.players=proposed.players;state.benchQueue=proposed.benchQueue;});$('rosterDialog').close()};
 const versionTag=document.createElement('small');
-versionTag.textContent='Version 24 · långtryck för dragning';versionTag.style.cssText='display:block;color:#a8c0e8;font-size:11px;margin-top:3px';
+versionTag.textContent='Version 25 · tydligare spelarkort';versionTag.style.cssText='display:block;color:#a8c0e8;font-size:11px;margin-top:3px';
 const brand=document.querySelector('header .brand, .brand');if(brand)brand.append(versionTag);
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&benchDrag){e.preventDefault();cancelBenchDrag();}});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible')cancelBenchDrag();});
