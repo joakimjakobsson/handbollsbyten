@@ -59,13 +59,19 @@ function syncBenchQueue(m=state){
   // Newly benched players join after everyone still waiting.
   for(const p of bench)if(!m.benchQueue.includes(p.id))m.benchQueue.push(p.id);
 }
-function sendBenchLast(id){
-  if(storageError||state.finished||!state.players.some(p=>p.id===id&&p.court===null))return;
+function moveBenchPlayer(id,toIndex){
+  if(storageError||state.finished||!Number.isInteger(toIndex))return;
+  const queue=candidateBench().map(p=>p.id),from=queue.indexOf(id);
+  if(from<0||toIndex<0||toIndex>=queue.length||from===toIndex)return;
   change(()=>{
-    if(state.benchQueue==null)state.benchQueue=benchTimeOrder().map(p=>p.id);
-    state.benchQueue=state.benchQueue.filter(x=>x!==id);
-    state.benchQueue.push(id);selected=null;
+    queue.splice(from,1);queue.splice(toIndex,0,id);
+    state.benchQueue=queue;selected=null;
   });
+}
+function nudgeBenchPlayer(id,direction){
+  if(![-1,1].includes(direction))return;
+  const from=candidateBench().findIndex(p=>p.id===id);
+  if(from>=0)moveBenchPlayer(id,from+direction);
 }
 let benchMenuPlayer=null;
 function openBenchMenu(id){
@@ -73,6 +79,13 @@ function openBenchMenu(id){
   if(!p||state.finished||storageError)return;
   benchMenuPlayer=id;
   $('benchMenuTitle').textContent=p.name;
+  const bench=candidateBench(),select=$('benchPlaceSelect');
+  select.replaceChildren();
+  bench.forEach((x,i)=>{
+    const opt=el('option','',(i+1)+'. '+x.name+(x.id===id?' (nuvarande plats)':''));
+    opt.value=String(i);select.append(opt);
+  });
+  select.value=String(bench.findIndex(x=>x.id===id));
   $('benchMenuDialog').showModal();
 }
 
@@ -117,15 +130,15 @@ function setMarkMode(next){
   updateMarkSummary(t);
 }
 function rankingMark(p,t){
-  // Compare whole displayed seconds so identical displayed times share a mark.
-  // Strictly more than three minutes: first mark at 03:01.
+  // Compare displayed whole seconds; ties share the same rank.
   const seconds=Math.floor(current(p,t));
-  if(seconds<=180)return null;
   const levels=[...new Set(state.players.filter(x=>x.court&&x.court!=='MV')
-    .map(x=>Math.floor(current(x,t))).filter(value=>value>180))]
-    .sort((a,b)=>b-a);
-  return seconds===levels[0]?{kind:'longest',label:'● Längst'}:
-    seconds===levels[1]?{kind:'second',label:'● Näst längst'}:null;
+    .map(x=>Math.floor(current(x,t))))].sort((a,b)=>b-a);
+  // Gate both marks until the longest outfield stint reaches 05:00.
+  if(!levels.length||levels[0]<300)return null;
+  if(seconds===levels[0])return {kind:'longest',label:'● Längst'};
+  if(seconds===levels[1]&&seconds>=240)return {kind:'second',label:'● Näst längst'};
+  return null;
 }
 
 const DEFAULT_MARKS={prepare:3,due:4,long:5};
@@ -202,12 +215,17 @@ const chosen=state.players.find(x=>x.id===selected);$('hint').textContent=chosen
 const court=$('court');court.replaceChildren();POS.forEach(pos=>{const p=state.players.find(p=>p.court===pos);if(p){court.append(makeRow(p,t));return}const btn=el('button','player empty'+(chosen?' can-enter':''),`${pos} · Tom plats ${chosen?'· Tryck för att sätta in':''}`);btn.disabled=!chosen||state.finished;btn.onclick=()=>change(()=>{move(chosen.id,pos);selected=null});court.append(btn)});$('courtCount').textContent=`${state.players.filter(p=>p.court).length}/7`;const bench=candidateBench();$('bench').replaceChildren(...bench.map((p,i)=>{
   const wrap=el('div','benchPlayer');
   const row=makeRow(p,t);row.querySelector('.subtext').prepend(document.createTextNode((i+1)+'. i kön · '));
-  const menu=el('button','benchMenuButton','⋯');menu.type='button';
-  menu.setAttribute('aria-label','Ändra köplats för '+p.name);
-  menu.disabled=state.finished||!!storageError;menu.onclick=()=>openBenchMenu(p.id);
-  wrap.append(row,menu);return wrap;
+  const controls=el('div','benchMoveControls');
+  for(const [direction,symbol,label] of [[-1,'↑','upp'],[1,'↓','ned']]){
+    const button=el('button','benchMoveButton',symbol);button.type='button';
+    button.setAttribute('aria-label','Flytta '+p.name+' '+label+' på bänken');
+    button.disabled=state.finished||!!storageError||(direction<0?i===0:i===bench.length-1);
+    button.onclick=()=>nudgeBenchPlayer(p.id,direction);
+    controls.append(button);
+  }
+  wrap.append(row,controls);return wrap;
 }));
-$('benchOrderHint').textContent=state.benchQueue==null?'Längst bänktid först. Vid lika bänktid går minst total speltid först. Tryck ⋯ eller håll inne för att flytta en spelare sist.':'Manuell kö · nästa byte följer ordningen nedan. Bänktiderna räknas som vanligt.';
+$('benchOrderHint').textContent=state.benchQueue==null?'Längst bänktid först. Vid lika bänktid går minst total speltid först. Använd ↑ ↓ för att ändra ordningen, eller håll inne för att välja plats.':'Manuell kö · nästa byte följer ordningen nedan. Använd ↑ ↓ eller håll inne för att välja plats. Bänktiderna räknas som vanligt.';
 $('resetBenchOrder').disabled=state.benchQueue==null||state.finished||!!storageError;$('benchCount').textContent=`${bench.length} spelare`;
 }
 $('toggleBtn').onclick=()=>change(()=>{if(state.runStarted!==null){state.elapsedBefore=elapsed();state.runStarted=null}else state.runStarted=Date.now()});
@@ -588,10 +606,10 @@ $('rosterBtn').onclick=()=>{draft=structuredClone(state.players);drawRoster();$(
   }
   change(()=>{state.players=proposed.players;state.benchQueue=proposed.benchQueue;});$('rosterDialog').close()};
 const versionTag=document.createElement('small');
-versionTag.textContent='Version 20 · delade tidsmarkeringar';versionTag.style.cssText='display:block;color:#a8c0e8;font-size:11px;margin-top:3px';
+versionTag.textContent='Version 22 · flyttbar bänk';versionTag.style.cssText='display:block;color:#a8c0e8;font-size:11px;margin-top:3px';
 const brand=document.querySelector('header .brand, .brand');if(brand)brand.append(versionTag);
 $('closeBenchMenu').onclick=()=>$('benchMenuDialog').close();
-$('sendBenchLast').onclick=()=>{sendBenchLast(benchMenuPlayer);$('benchMenuDialog').close();};
+$('saveBenchPlace').onclick=()=>{moveBenchPlayer(benchMenuPlayer,Number($('benchPlaceSelect').value));$('benchMenuDialog').close();};
 $('resetBenchOrder').onclick=()=>change(()=>{state.benchQueue=null;selected=null;});
 $('markModeSelect').onchange=()=>setMarkMode($('markModeSelect').value);
 $('markSettingsBtn').onclick=()=>{

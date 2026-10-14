@@ -70,7 +70,7 @@
 /* v16: separate menu touch target, with no nested buttons. */
 .benchPlayer{display:flex;align-items:stretch;gap:5px;min-width:0}
 .benchPlayer .player{flex:1;min-width:0;gap:7px}
-.benchMenuButton{flex:0 0 44px;padding:8px 4px;background:#e9f2ff;color:#1c4684;font-size:23px;border:1px solid #c9d5e5}
+
 .resetBenchOrder{font-size:12px;padding:9px 12px;margin:0 0 12px;color:#255188}
 #benchMenuDialog .support{margin-top:14px}
 @media(max-width:400px){.benchPlayer .player{padding:9px 7px;gap:5px}.benchPlayer .numbers b{font-size:16px}.benchPlayer .numbers small{font-size:9px}.benchPlayer .jersey{min-width:26px;padding:6px 4px;font-size:13px}.benchPlayer .position{min-width:30px}}
@@ -105,3 +105,10 @@
 .player.mark-second{border-color:#eeb55a;background:#fff7e9}
 .mark-longest .stintBadge{color:#a01b27}.mark-second .stintBadge{color:#8b4200}
 .player.selected{border:3px solid #0759e4;background:#dceaff}
+
+/* v22: adjacent moves and direct placement; separate accessible touch targets. */
+.benchMoveControls{display:grid;grid-template-rows:1fr 1fr;gap:3px;flex:0 0 44px}
+.benchMoveButton{padding:4px;background:#e9f2ff;color:#1c4684;font-size:21px;border:1px solid #c9d5e5;min-height:44px;border-radius:9px}
+.benchMoveButton:disabled{opacity:.35}
+.benchPlaceLabel{display:block;font-size:13px;font-weight:700;color:#334b6b;margin:14px 0 6px}
+#benchPlaceSelect{width:100%;font-size:16px;padding:11px;border:1px solid #adbed6;border-radius:10px;background:white;color:#183250}

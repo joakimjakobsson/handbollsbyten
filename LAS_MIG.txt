@@ -1,17 +1,16 @@
-Handbollsbyten – version 20
+Handbollsbyten – version 22
 
 Välj mellan Bytesgränser och Längst / näst längst via
 ”Markeringar på planen”. Valet sparas på enheten.
 
 Nytt i Längst / näst längst:
-- Ingen markering vid matchstart eller till och med 03:00.
-- Från 03:01 markeras alla som delar längsta pågående bytestiden.
-- Alla som delar nästa skilda tidsnivå markeras som näst längst,
-  om också deras pågående bytestid är över tre minuter.
+- Ingen markering före längsta pågående bytestiden når 05:00.
+- Från 05:00 markeras alla som delar längsta tiden.
+- Näst längst visas samtidigt för nästa skilda tidsnivå,
+  om den är minst 04:00. Före längsta når 05:00 visas den inte.
+- Om alla har samma tid från fem minuter markeras alla som längst.
 - Lika tid jämförs i hela sekunder, precis som tiden visas.
-- Om alla utespelare har samma tid över tre minuter markeras
-  alla som längst. Ingen markeras då som näst längst.
-- Målvakten och bänkspelarna undantas.
+- Målvakten och bänken undantas.
 
 Bytesgränser fungerar som tidigare:
 Gul från 3 min, orange från 4 min och röd från 5 min.
@@ -22,4 +21,14 @@ Markeringar uppdateras under pågående match utan att tryckytor
 byggs om. Pausad klocka fryser tiderna.
 
 Packa upp och ersätt den tidigare webbappens filer på samma adress.
-Kontrollera att Version 20 visas. Testa på iPhone före match.
+Kontrollera att Version 22 visas. Testa på iPhone före match.
+
+Nytt i version 22 – flyttbar bänk:
+- Pilar ↑ och ↓ flyttar en spelare en plats i taget.
+- Håll inne på spelaren för att välja valfri plats direkt.
+- Mellanliggande spelare flyttas ett steg vid direkt placering.
+- Funktionen Flytta sist är borttagen.
+- Flyttar skapar en manuell kö som sparas på enheten.
+- Tiderna påverkas inte. Gruppbyten följer den nya kön.
+- Spelare som går av planen hamnar efter dem som redan väntar.
+- Återställ efter bänktid återgår till automatisk ordning.
