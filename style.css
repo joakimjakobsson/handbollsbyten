@@ -107,8 +107,16 @@
 .player.selected{border:3px solid #0759e4;background:#dceaff}
 
 /* v22: adjacent moves and direct placement; separate accessible touch targets. */
-.benchMoveControls{display:grid;grid-template-rows:1fr 1fr;gap:3px;flex:0 0 44px}
-.benchMoveButton{padding:4px;background:#e9f2ff;color:#1c4684;font-size:21px;border:1px solid #c9d5e5;min-height:44px;border-radius:9px}
-.benchMoveButton:disabled{opacity:.35}
 .benchPlaceLabel{display:block;font-size:13px;font-weight:700;color:#334b6b;margin:14px 0 6px}
 #benchPlaceSelect{width:100%;font-size:16px;padding:11px;border:1px solid #adbed6;border-radius:10px;background:white;color:#183250}
+
+/* v23: pointer-based dragging works with touch and mouse. Scroll normally on the player card. */
+.benchPlayer{position:relative}
+.benchDragHandle{flex:0 0 44px;min-height:60px;padding:5px;background:#e9f2ff;color:#1c4684;font-size:28px;border:1px solid #c9d5e5;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;cursor:grab}
+.benchDragHandle:active{cursor:grabbing}
+.benchPlayer.dragSource{opacity:.3}
+.benchPlayer.dropBefore::before,.benchPlayer.dropAfter::after{content:'';position:absolute;left:0;right:0;height:4px;background:#0759e4;border-radius:4px;z-index:2}
+.benchPlayer.dropBefore::before{top:-6px}.benchPlayer.dropAfter::after{bottom:-6px}
+.benchDragGhost{position:fixed;z-index:1000;pointer-events:none;opacity:.94;box-shadow:0 10px 30px #102a5366;background:white;border-radius:13px;transform:scale(1.02)}
+.benchDragGhost.dragSource{opacity:.94}
+.benchDragging{user-select:none;-webkit-user-select:none;cursor:grabbing}

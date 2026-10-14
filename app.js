@@ -73,6 +73,84 @@ function nudgeBenchPlayer(id,direction){
   const from=candidateBench().findIndex(p=>p.id===id);
   if(from>=0)moveBenchPlayer(id,from+direction);
 }
+
+let benchDrag=null;
+function benchDropIndex(id,y){
+  const rows=[...$('bench').querySelectorAll('.benchPlayer')].filter(row=>row.dataset.benchId!==id);
+  const before=rows.findIndex(row=>{const rect=row.getBoundingClientRect();return y<rect.top+rect.height/2;});
+  return before<0?rows.length:before;
+}
+function cancelBenchDrag(){
+  const drag=benchDrag;if(!drag)return;
+  benchDrag=null;
+  if(drag.frame)cancelAnimationFrame(drag.frame);
+  drag.ghost?.remove();
+  drag.row.classList.remove('dragSource');
+  for(const row of $('bench').querySelectorAll('.benchPlayer'))row.classList.remove('dropBefore','dropAfter');
+  document.body.classList.remove('benchDragging');
+  drag.handle.setAttribute('aria-pressed','false');
+  if(drag.handle.hasPointerCapture(drag.pointerId))drag.handle.releasePointerCapture(drag.pointerId);
+}
+function showBenchDrop(){
+  const drag=benchDrag;if(!drag?.active)return;
+  drag.toIndex=benchDropIndex(drag.id,drag.y);
+  drag.ghost.style.top=(drag.y-drag.offsetY)+'px';
+  const rows=[...$('bench').querySelectorAll('.benchPlayer')];
+  rows.forEach(row=>row.classList.remove('dropBefore','dropAfter'));
+  const others=rows.filter(row=>row.dataset.benchId!==drag.id);
+  if(others[drag.toIndex])others[drag.toIndex].classList.add('dropBefore');
+  else others.at(-1)?.classList.add('dropAfter');
+}
+function scrollBenchDrag(stamp){
+  const drag=benchDrag;if(!drag?.active)return;
+  const height=window.innerHeight,edge=85;
+  const speed=drag.y<edge?-Math.min(600,(edge-drag.y)*8):
+    drag.y>height-edge?Math.min(600,(drag.y-height+edge)*8):0;
+  const dt=drag.lastStamp?Math.min(32,stamp-drag.lastStamp):16;
+  drag.lastStamp=stamp;
+  if(speed){window.scrollBy(0,speed*dt/1000);showBenchDrop();}
+  drag.frame=requestAnimationFrame(scrollBenchDrag);
+}
+function attachBenchDrag(handle,row,id){
+  handle.addEventListener('pointerdown',e=>{
+    if(e.button!==0||!e.isPrimary||state.finished||storageError||candidateBench().length<2)return;
+    cancelBenchDrag();e.preventDefault();
+    const rect=row.getBoundingClientRect();
+    benchDrag={id,row,handle,pointerId:e.pointerId,x:e.clientX,y:e.clientY,startX:e.clientX,startY:e.clientY,
+      offsetY:e.clientY-rect.top,rect,active:false,frame:null};
+    handle.setAttribute('aria-pressed','true');
+    try{handle.setPointerCapture(e.pointerId);}catch{cancelBenchDrag();}
+  });
+  handle.addEventListener('pointermove',e=>{
+    const drag=benchDrag;if(!drag||e.pointerId!==drag.pointerId)return;
+    e.preventDefault();drag.x=e.clientX;drag.y=e.clientY;
+    if(!drag.active&&Math.hypot(drag.x-drag.startX,drag.y-drag.startY)>=7){
+      drag.active=true;drag.row.classList.add('dragSource');
+      const ghost=row.cloneNode(true);ghost.classList.add('benchDragGhost');ghost.setAttribute('aria-hidden','true');
+      ghost.querySelectorAll('button').forEach(button=>{button.disabled=true;button.tabIndex=-1;});
+      ghost.style.width=drag.rect.width+'px';ghost.style.left=drag.rect.left+'px';
+      document.body.append(ghost);drag.ghost=ghost;document.body.classList.add('benchDragging');
+      drag.frame=requestAnimationFrame(scrollBenchDrag);
+    }
+    showBenchDrop();
+  });
+  handle.addEventListener('pointerup',e=>{
+    const drag=benchDrag;if(!drag||e.pointerId!==drag.pointerId)return;
+    e.preventDefault();drag.x=e.clientX;drag.y=e.clientY;showBenchDrop();
+    const rect=$('bench').getBoundingClientRect();
+    const inside=drag.x>=rect.left-30&&drag.x<=rect.right+30&&drag.y>=rect.top-30&&drag.y<=rect.bottom+30;
+    const active=drag.active,to=drag.toIndex;
+    cancelBenchDrag();
+    if(active){if(inside)moveBenchPlayer(id,to);}
+    else openBenchMenu(id);
+  });
+  for(const event of ['pointercancel','lostpointercapture'])handle.addEventListener(event,e=>{
+    if(benchDrag?.pointerId===e.pointerId)cancelBenchDrag();
+  });
+  // Enter/Space opens direct placement; mouse/touch is handled by pointerup.
+  handle.onclick=e=>{if(e.detail===0&&!benchDrag)openBenchMenu(id);};
+}
+
 let benchMenuPlayer=null;
 function openBenchMenu(id){
   const p=state.players.find(p=>p.id===id&&p.court===null);
@@ -210,22 +288,19 @@ function makeRow(p,t){
   updateRowMark(row,p,t,minimumCourtStint(t));
   return row;
 }
-function render(){prepareShareLink();const t=elapsed();renderMarkLegend();updateMarkSummary(t);$('clock').textContent=fmt(halfElapsed());$('halfLabel').textContent=state.finished?'MATCH AVSLUTAD':`HALVLEK ${state.half}`;$('totalTime').textContent=`Totalt ${fmt(t)} · ${state.finished?'Avslutad':state.runStarted!==null?'Pågår':'Pausad'}`;$('toggleBtn').textContent=state.runStarted!==null?'Ⅱ Pausa':'▶ Starta';$('toggleBtn').disabled=state.finished||!!storageError;$('halfBtn').textContent=state.half===1?'Halvtid':'Avsluta';$('halfBtn').disabled=state.finished||halfElapsed()===0||!!storageError;$('rosterBtn').disabled=state.runStarted!==null||!!storageError;$('groupBtn').disabled=state.finished||!!storageError;$('allOutBtn').disabled=state.finished||!!storageError;$('undoGroupBar').hidden=!groupUndo;$('storageWarning').hidden=!(storageError||repairMessage);$('storageWarning').textContent=storageError||repairMessage;
+function render(){cancelBenchDrag();prepareShareLink();const t=elapsed();renderMarkLegend();updateMarkSummary(t);$('clock').textContent=fmt(halfElapsed());$('halfLabel').textContent=state.finished?'MATCH AVSLUTAD':`HALVLEK ${state.half}`;$('totalTime').textContent=`Totalt ${fmt(t)} · ${state.finished?'Avslutad':state.runStarted!==null?'Pågår':'Pausad'}`;$('toggleBtn').textContent=state.runStarted!==null?'Ⅱ Pausa':'▶ Starta';$('toggleBtn').disabled=state.finished||!!storageError;$('halfBtn').textContent=state.half===1?'Halvtid':'Avsluta';$('halfBtn').disabled=state.finished||halfElapsed()===0||!!storageError;$('rosterBtn').disabled=state.runStarted!==null||!!storageError;$('groupBtn').disabled=state.finished||!!storageError;$('allOutBtn').disabled=state.finished||!!storageError;$('undoGroupBar').hidden=!groupUndo;$('storageWarning').hidden=!(storageError||repairMessage);$('storageWarning').textContent=storageError||repairMessage;
 const chosen=state.players.find(x=>x.id===selected);$('hint').textContent=chosen?`Vald: ${chosen.name}. ${chosen.court?'Tryck på en bänkspelare för byte eller en planspelare för positionsbyte.':'Tryck på spelaren som ska ut eller på en tom position.'} (Tryck samma spelare för att avbryta.)`:'Välj först en bänkspelare och sedan spelaren på planen som ska ut.';$('hint').classList.toggle('has-selection',!!chosen);
 const court=$('court');court.replaceChildren();POS.forEach(pos=>{const p=state.players.find(p=>p.court===pos);if(p){court.append(makeRow(p,t));return}const btn=el('button','player empty'+(chosen?' can-enter':''),`${pos} · Tom plats ${chosen?'· Tryck för att sätta in':''}`);btn.disabled=!chosen||state.finished;btn.onclick=()=>change(()=>{move(chosen.id,pos);selected=null});court.append(btn)});$('courtCount').textContent=`${state.players.filter(p=>p.court).length}/7`;const bench=candidateBench();$('bench').replaceChildren(...bench.map((p,i)=>{
-  const wrap=el('div','benchPlayer');
+  const wrap=el('div','benchPlayer');wrap.dataset.benchId=p.id;
   const row=makeRow(p,t);row.querySelector('.subtext').prepend(document.createTextNode((i+1)+'. i kön · '));
-  const controls=el('div','benchMoveControls');
-  for(const [direction,symbol,label] of [[-1,'↑','upp'],[1,'↓','ned']]){
-    const button=el('button','benchMoveButton',symbol);button.type='button';
-    button.setAttribute('aria-label','Flytta '+p.name+' '+label+' på bänken');
-    button.disabled=state.finished||!!storageError||(direction<0?i===0:i===bench.length-1);
-    button.onclick=()=>nudgeBenchPlayer(p.id,direction);
-    controls.append(button);
-  }
-  wrap.append(row,controls);return wrap;
+  const handle=el('button','benchDragHandle','⠿');handle.type='button';
+  handle.setAttribute('aria-label','Dra '+p.name+' till en annan plats på bänken. Tryck för att välja plats.');
+  handle.setAttribute('aria-pressed','false');
+  handle.disabled=state.finished||!!storageError||bench.length<2;
+  attachBenchDrag(handle,wrap,p.id);
+  wrap.append(row,handle);return wrap;
 }));
-$('benchOrderHint').textContent=state.benchQueue==null?'Längst bänktid först. Vid lika bänktid går minst total speltid först. Använd ↑ ↓ för att ändra ordningen, eller håll inne för att välja plats.':'Manuell kö · nästa byte följer ordningen nedan. Använd ↑ ↓ eller håll inne för att välja plats. Bänktiderna räknas som vanligt.';
+$('benchOrderHint').textContent=state.benchQueue==null?'Längst bänktid först. Vid lika bänktid går minst total speltid först. Dra i ⠿ för att ändra ordningen. Tryck på handtaget eller håll inne på spelaren för att välja plats.':'Manuell kö · nästa byte följer ordningen nedan. Dra i ⠿ eller tryck på handtaget för att välja plats. Bänktiderna räknas som vanligt.';
 $('resetBenchOrder').disabled=state.benchQueue==null||state.finished||!!storageError;$('benchCount').textContent=`${bench.length} spelare`;
 }
 $('toggleBtn').onclick=()=>change(()=>{if(state.runStarted!==null){state.elapsedBefore=elapsed();state.runStarted=null}else state.runStarted=Date.now()});
@@ -606,8 +681,11 @@ $('rosterBtn').onclick=()=>{draft=structuredClone(state.players);drawRoster();$(
   }
   change(()=>{state.players=proposed.players;state.benchQueue=proposed.benchQueue;});$('rosterDialog').close()};
 const versionTag=document.createElement('small');
-versionTag.textContent='Version 22 · flyttbar bänk';versionTag.style.cssText='display:block;color:#a8c0e8;font-size:11px;margin-top:3px';
+versionTag.textContent='Version 23 · dra och släpp på bänken';versionTag.style.cssText='display:block;color:#a8c0e8;font-size:11px;margin-top:3px';
 const brand=document.querySelector('header .brand, .brand');if(brand)brand.append(versionTag);
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&benchDrag){e.preventDefault();cancelBenchDrag();}});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible')cancelBenchDrag();});
+window.addEventListener('blur',cancelBenchDrag);
 $('closeBenchMenu').onclick=()=>$('benchMenuDialog').close();
 $('saveBenchPlace').onclick=()=>{moveBenchPlayer(benchMenuPlayer,Number($('benchPlaceSelect').value));$('benchMenuDialog').close();};
 $('resetBenchOrder').onclick=()=>change(()=>{state.benchQueue=null;selected=null;});

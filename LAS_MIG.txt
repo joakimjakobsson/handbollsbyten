@@ -1,4 +1,4 @@
-Handbollsbyten – version 22
+Handbollsbyten – version 23
 
 Välj mellan Bytesgränser och Längst / näst längst via
 ”Markeringar på planen”. Valet sparas på enheten.
@@ -21,14 +21,17 @@ Markeringar uppdateras under pågående match utan att tryckytor
 byggs om. Pausad klocka fryser tiderna.
 
 Packa upp och ersätt den tidigare webbappens filer på samma adress.
-Kontrollera att Version 22 visas. Testa på iPhone före match.
+Kontrollera att Version 23 visas. Testa på iPhone före match.
 
-Nytt i version 22 – flyttbar bänk:
-- Pilar ↑ och ↓ flyttar en spelare en plats i taget.
-- Håll inne på spelaren för att välja valfri plats direkt.
-- Mellanliggande spelare flyttas ett steg vid direkt placering.
-- Funktionen Flytta sist är borttagen.
-- Flyttar skapar en manuell kö som sparas på enheten.
-- Tiderna påverkas inte. Gruppbyten följer den nya kön.
-- Spelare som går av planen hamnar efter dem som redan väntar.
+Nytt i version 23 – dra och släpp på bänken:
+- Dra i handtaget ⠿ bredvid spelaren till en annan plats.
+- En blå linje visar var spelaren placeras när du släpper.
+- Listan rullar när du drar nära skärmens över- eller underkant.
+- Släpp utanför bänklistan för att avbryta flytten.
+- Tryck på handtaget eller håll inne på spelaren för att välja
+  valfri plats i en meny. Enter/Space på handtaget öppnar samma meny.
+- Du kan rulla sidan genom att dra på själva spelarraden.
+- Tiderna påverkas inte. Ordningen sparas på enheten och gruppbyten
+  följer den nya kön. Utbytta spelare hamnar efter dem som väntar.
 - Återställ efter bänktid återgår till automatisk ordning.
+- Esc, avbruten pekrörelse eller byte till en annan app avbryter flytten.
