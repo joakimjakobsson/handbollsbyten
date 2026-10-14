@@ -332,7 +332,7 @@ function render(){cancelBenchDrag();prepareShareLink();const t=elapsed();renderM
 const chosen=state.players.find(x=>x.id===selected);$('hint').textContent=chosen?`Vald: ${chosen.name}. ${chosen.court?'Tryck på en bänkspelare för byte eller en planspelare för positionsbyte.':'Tryck på spelaren som ska ut eller på en tom position.'} (Tryck samma spelare för att avbryta.)`:'Välj först en bänkspelare och sedan spelaren på planen som ska ut.';$('hint').classList.toggle('has-selection',!!chosen);
 const court=$('court');court.replaceChildren();POS.forEach(pos=>{const p=state.players.find(p=>p.court===pos);if(p){court.append(makeRow(p,t));return}const btn=el('button','player empty'+(chosen?' can-enter':''),`${pos} · Tom plats ${chosen?'· Tryck för att sätta in':''}`);btn.disabled=!chosen||state.finished;btn.onclick=()=>change(()=>{move(chosen.id,pos);selected=null});court.append(btn)});$('courtCount').textContent=`${state.players.filter(p=>p.court).length}/7`;const bench=candidateBench();$('bench').replaceChildren(...bench.map((p,i)=>{
   const wrap=el('div','benchPlayer');wrap.dataset.benchId=p.id;
-  const row=makeRow(p,t);row.querySelector('.subtext').prepend(document.createTextNode((i+1)+'. i kön · '));
+  const row=makeRow(p,t);row.querySelector('.name').prepend(el('span','queueIndex',(i+1)+'. '));
   const handle=el('button','benchDragHandle','⠿');handle.type='button';
   handle.setAttribute('aria-label','Håll i en halv sekund och dra '+p.name+' till en annan plats på bänken. Tryck för att välja plats.');
   handle.setAttribute('aria-pressed','false');
@@ -721,7 +721,7 @@ $('rosterBtn').onclick=()=>{draft=structuredClone(state.players);drawRoster();$(
   }
   change(()=>{state.players=proposed.players;state.benchQueue=proposed.benchQueue;});$('rosterDialog').close()};
 const versionTag=document.createElement('small');
-versionTag.textContent='Version 25 · tydligare spelarkort';versionTag.style.cssText='display:block;color:#a8c0e8;font-size:11px;margin-top:3px';
+versionTag.textContent='Version 26 · kompakt överblick';versionTag.style.cssText='display:block;color:#a8c0e8;font-size:11px;margin-top:3px';
 const brand=document.querySelector('header .brand, .brand');if(brand)brand.append(versionTag);
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&benchDrag){e.preventDefault();cancelBenchDrag();}});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible')cancelBenchDrag();});

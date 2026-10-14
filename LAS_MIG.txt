@@ -1,48 +1,28 @@
-Handbollsbyten – version 25
+Handbollsbyten – version 26: kompakt överblick
 
-Välj mellan Bytesgränser och Längst / näst längst via
-”Markeringar på planen”. Valet sparas på enheten.
+Spelarkorten:
+- Namn och tid i pågående byte på första raden.
+- Position, tröjnummer och totaltider på andra raden.
+- Bänkköplats som ett litet nummer framför namnet.
+- Bytesmarkering och vald spelare visas på extra rad vid behov.
+- Långa namn kan brytas mellan ord, utan att döljas.
+- Korten och draghandtagen är minst 58 px höga.
 
-Nytt i Längst / näst längst:
-- Ingen markering före längsta pågående bytestiden når 05:00.
-- Från 05:00 markeras alla som delar längsta tiden.
-- Näst längst visas samtidigt för nästa skilda tidsnivå,
-  om den är minst 04:00. Före längsta når 05:00 visas den inte.
-- Om alla har samma tid från fem minuter markeras alla som längst.
-- Lika tid jämförs i hela sekunder, precis som tiden visas.
-- Målvakten och bänken undantas.
+Bänken:
+Håll handtaget stilla i 0,5 sekunder, dra sedan till önskad plats.
+Blå linje visar placeringen. Svep före aktivering scrollar sidan.
+Fri högermarginal finns kvar. Tryck på handtaget för att välja plats.
+Ordningen sparas och gruppbyten följer kön; tiderna behålls.
+Återställ efter bänktid återgår till automatisk ordning.
 
-Bytesgränser fungerar som tidigare:
-Gul från 3 min, orange från 4 min och röd från 5 min.
-Gränserna kan ändras med knappen Bytesgränser.
+Markeringar:
+Välj mellan Bytesgränser och Längst / näst längst.
+Bytesgränser har justerbara påminnelser, normalt 3 / 4 / 5 minuter.
+Längst / näst längst börjar när längsta pågående bytet når 5 minuter.
+Näst längst kräver minst 4 minuter. Alla som delar tid markeras.
+Målvakten och bänken undantas.
 
-Bänkkö, gruppbyten och speltidsfördelning fungerar som tidigare.
-Markeringar uppdateras under pågående match utan att tryckytor
-byggs om. Pausad klocka fryser tiderna.
-
-Packa upp och ersätt den tidigare webbappens filer på samma adress.
-Kontrollera att Version 25 visas. Testa på iPhone före match.
-
-Nytt i version 25 – dra och släpp på bänken:
-- Håll handtaget ⠿ stilla i cirka 0,5 sekunder. När spelaren lyfts
-  visuellt kan du dra henne till en annan plats.
-- Svep före aktiveringen scrollar sidan och avbryter flytten.
-- En fri marginal till höger om handtagen ger extra plats för scrollning.
-- En blå linje visar var spelaren placeras när du släpper.
-- Listan rullar när du drar nära skärmens över- eller underkant.
-- Släpp utanför bänklistan för att avbryta flytten.
-- Tryck på handtaget eller håll inne på spelaren för att välja
-  valfri plats i en meny. Enter/Space på handtaget öppnar samma meny.
-- Du kan rulla sidan genom att dra på själva spelarraden.
-- Tiderna påverkas inte. Ordningen sparas på enheten och gruppbyten
-  följer den nya kön. Utbytta spelare hamnar efter dem som väntar.
-- Återställ efter bänktid återgår till automatisk ordning.
-- Esc, avbruten pekrörelse eller byte till en annan app avbryter flytten.
-
-Nytt i version 25 – tydligare spelarkort:
-Spelarnamnet får hela kortets bredd, även med tröjnummer.
-Position, nummer och aktuell tid ligger på raden under namnet.
-Köplats/status och totaltider visas under dessa.
-Namn bryts i första hand mellan ord, inte mitt i efternamnet.
-Layouten gäller både plan och bänk. Långtryck, fri högermarginal,
-markeringar, tider och bytesfunktioner fungerar som tidigare.
+Uppdatering:
+Ersätt tidigare webbappens filer på samma adress.
+Kontrollera att Version 26 visas. Funktionstesterna passerar;
+provkör layout och dragning på iPhone före match.
